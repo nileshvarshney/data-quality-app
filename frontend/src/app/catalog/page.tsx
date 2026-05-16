@@ -1,108 +1,89 @@
 'use client'
-import { useEffect, useState, useCallback, useRef } from 'react'
-import Link from 'next/link'
-import { catalogApi } from '@/services/apiClient'
-import { Search, Database, BookOpen, Package, Globe, Loader2, Filter, Tag } from 'lucide-react'
+import { useEffect, useState, useCallback } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
+import { Search, Loader2, LayoutGrid, List, SlidersHorizontal, Database, Tag } from 'lucide-react'
 import clsx from 'clsx'
+import { catalogApi } from '@/services/apiClient'
+import { useCurrentUser } from '@/hooks/useCurrentUser'
+import CatalogFacets from '@/components/catalog/CatalogFacets'
+import CatalogResultCard, { type CatalogItem } from '@/components/catalog/CatalogResultCard'
+import CatalogResultRow from '@/components/catalog/CatalogResultRow'
+import QuickFilters from '@/components/catalog/QuickFilters'
+import SavedSearches from '@/components/catalog/SavedSearches'
 import HowItWorks from '@/components/common/HowItWorks'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface CatalogResult {
-  id: string
-  entity_type: 'asset' | 'term' | 'product'
-  name: string
-  description: string | null
-  domain: string | null
-  owner: string | null
-  extra?: Record<string, unknown>
+interface Facets {
+  domains: { id: string; name: string; count: number }[]
+  classifications: { value: string; count: number }[]
+  certifications: { value: string; count: number }[]
+  tags: { name: string; count: number }[]
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-const ENTITY_CONFIG: Record<string, { label: string; icon: React.ReactNode; cls: string }> = {
-  asset:        { label: 'Asset',        icon: <Database size={12} />, cls: 'bg-blue-100 text-blue-700' },
-  glossary:     { label: 'Glossary',     icon: <BookOpen size={12} />, cls: 'bg-purple-100 text-purple-700' },
-  data_product: { label: 'Data Product', icon: <Package  size={12} />, cls: 'bg-green-100 text-green-700' },
-  // legacy aliases
-  term:    { label: 'Glossary',     icon: <BookOpen size={12} />, cls: 'bg-purple-100 text-purple-700' },
-  product: { label: 'Data Product', icon: <Package  size={12} />, cls: 'bg-green-100 text-green-700' },
+interface SearchResponse {
+  results: CatalogItem[]
+  total: number
+  page: number
+  page_size: number
 }
-
-const ENTITY_HREF: Record<string, (id: string) => string> = {
-  asset:        id => `/dashboard/tables/${id}`,
-  glossary:     () => '/glossary',
-  data_product: () => '/data-products',
-  term:         () => '/glossary',
-  product:      () => '/data-products',
-}
-
-const FILTER_TABS = [
-  { value: '',            label: 'All' },
-  { value: 'asset',       label: 'Assets' },
-  { value: 'glossary',    label: 'Glossary' },
-  { value: 'data_product', label: 'Data Products' },
-]
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 
 function SkeletonCard() {
   return (
     <div className="animate-pulse bg-white rounded-xl border border-gray-200 p-4">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex gap-3">
+        <div className="w-10 h-10 bg-gray-200 rounded-full shrink-0" />
         <div className="flex-1 space-y-2">
           <div className="h-4 bg-gray-200 rounded w-1/2" />
           <div className="h-3 bg-gray-100 rounded w-3/4" />
           <div className="h-3 bg-gray-100 rounded w-1/3" />
         </div>
-        <div className="h-5 w-16 bg-gray-200 rounded-full shrink-0" />
       </div>
     </div>
   )
 }
 
-// ── Result card ───────────────────────────────────────────────────────────────
+// ── Sort options ──────────────────────────────────────────────────────────────
 
-function ResultCard({ item }: { item: CatalogResult }) {
-  const cfg  = ENTITY_CONFIG[item.entity_type] ?? ENTITY_CONFIG.asset
-  const href = (ENTITY_HREF[item.entity_type] ?? ENTITY_HREF.asset)(item.id)
+const SORT_OPTIONS = [
+  { value: 'relevance',    label: 'Relevance' },
+  { value: 'quality',      label: 'Quality Score' },
+  { value: 'trust',        label: 'Trust Score' },
+  { value: 'alphabetical', label: 'A → Z' },
+  { value: 'updated',      label: 'Last Updated' },
+]
+
+// ── Pagination ────────────────────────────────────────────────────────────────
+
+function Pagination({ page, total, pageSize, onChange }: {
+  page: number; total: number; pageSize: number; onChange: (p: number) => void
+}) {
+  const totalPages = Math.ceil(total / pageSize)
+  if (totalPages <= 1) return null
+  const pages = Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+    const p = page <= 3 ? i + 1 : page - 2 + i
+    return p >= 1 && p <= totalPages ? p : null
+  }).filter(Boolean) as number[]
+
   return (
-    <Link href={href} className="block bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md hover:border-blue-300 transition-all cursor-pointer">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <p className="font-semibold text-gray-900 text-sm leading-snug truncate">{item.name}</p>
-          {item.description && (
-            <p className="text-xs text-gray-500 mt-1 line-clamp-2">{item.description}</p>
-          )}
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs text-gray-400">
-            {item.domain && (
-              <span className="flex items-center gap-1">
-                <Globe size={11} />
-                {item.domain}
-              </span>
-            )}
-            {item.owner && <span>Owner: {item.owner}</span>}
-          </div>
-        </div>
-        <span className={clsx('flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full shrink-0', cfg.cls)}>
-          {cfg.icon}
-          {cfg.label}
-        </span>
-      </div>
-    </Link>
-  )
-}
-
-// ── Popular grid ──────────────────────────────────────────────────────────────
-
-function PopularGrid({ items, innerRef }: { items: CatalogResult[]; innerRef?: React.Ref<HTMLDivElement> }) {
-  if (items.length === 0) return null
-  return (
-    <div ref={innerRef} id="popular-assets">
-      <h2 className="text-sm font-semibold text-gray-700 mb-3">Popular Assets</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {items.map(item => <ResultCard key={item.id} item={item} />)}
-      </div>
+    <div className="flex items-center justify-center gap-1 mt-6">
+      <button onClick={() => onChange(page - 1)} disabled={page <= 1}
+        className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 disabled:opacity-40 hover:bg-gray-50">
+        Prev
+      </button>
+      {pages.map(p => (
+        <button key={p} onClick={() => onChange(p)}
+          className={clsx('px-3 py-1.5 text-sm rounded-lg border transition-colors',
+            p === page ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 hover:bg-gray-50')}>
+          {p}
+        </button>
+      ))}
+      <button onClick={() => onChange(page + 1)} disabled={page >= totalPages}
+        className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 disabled:opacity-40 hover:bg-gray-50">
+        Next
+      </button>
     </div>
   )
 }
@@ -110,49 +91,105 @@ function PopularGrid({ items, innerRef }: { items: CatalogResult[]; innerRef?: R
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function CatalogPage() {
-  const [query, setQuery]           = useState('')
-  const [filter, setFilter]         = useState('')
-  const [results, setResults]       = useState<CatalogResult[]>([])
-  const [popular, setPopular]       = useState<CatalogResult[]>([])
-  const [loading, setLoading]       = useState(false)
-  const [popularLoading, setPopularLoading] = useState(true)
-  const [searched, setSearched]     = useState(false)
-  const popularRef = useRef<HTMLDivElement>(null)
+  const searchParams = useSearchParams()
+  const router       = useRouter()
+  const user         = useCurrentUser()
 
-  // Load popular assets on mount
+  const [query,    setQuery]    = useState(searchParams.get('q') ?? '')
+  const [sort,     setSort]     = useState(searchParams.get('sort') ?? 'relevance')
+  const [viewMode, setViewMode] = useState<'card' | 'table'>(
+    (searchParams.get('view') as 'card' | 'table') ?? 'card'
+  )
+  const [page, setPage] = useState(Number(searchParams.get('page') ?? 1))
+  const [filters, setFilters] = useState<Record<string, string | undefined>>({
+    type:           searchParams.get('type')           ?? undefined,
+    domain_id:      searchParams.get('domain_id')      ?? undefined,
+    classification: searchParams.get('classification') ?? undefined,
+    certification:  searchParams.get('certification')  ?? undefined,
+    owner:          searchParams.get('owner')          ?? undefined,
+    tag:            searchParams.get('tag')            ?? undefined,
+  })
+
+  const [results,        setResults]        = useState<CatalogItem[]>([])
+  const [total,          setTotal]          = useState(0)
+  const [facets,         setFacets]         = useState<Facets>({ domains: [], classifications: [], certifications: [], tags: [] })
+  const [loading,        setLoading]        = useState(false)
+  const [facetLoading,   setFacetLoading]   = useState(true)
+  const [popular,        setPopular]        = useState<CatalogItem[]>([])
+  const [popularLoading, setPopularLoading] = useState(true)
+  const [hasSearched,    setHasSearched]    = useState(!!searchParams.get('q'))
+
+  // -- Sync state → URL -------------------------------------------------------
+  const updateUrl = useCallback((overrides: Record<string, string | undefined>) => {
+    const params = new URLSearchParams()
+    const merged = { q: query, sort, view: viewMode, page: String(page), ...filters, ...overrides }
+    Object.entries(merged).forEach(([k, v]) => { if (v) params.set(k, v) })
+    router.replace(`/catalog?${params.toString()}`, { scroll: false })
+  }, [query, sort, viewMode, page, filters, router])
+
+  // -- Load popular on mount ---------------------------------------------------
   useEffect(() => {
-    setPopularLoading(true)
     catalogApi.popular()
-      .then(res => setPopular(Array.isArray(res.data) ? res.data : []))
+      .then(r => setPopular(Array.isArray(r.data) ? r.data : []))
       .catch(() => setPopular([]))
       .finally(() => setPopularLoading(false))
   }, [])
 
-  const doSearch = useCallback(async (q: string, type: string) => {
-    if (!q.trim()) {
-      setSearched(false)
+  // -- Load facets independently -----------------------------------------------
+  useEffect(() => {
+    setFacetLoading(true)
+    const params = Object.fromEntries(Object.entries(filters).filter(([, v]) => v != null))
+    catalogApi.facets(params)
+      .then(r => setFacets(r.data))
+      .catch(() => {})
+      .finally(() => setFacetLoading(false))
+  }, [filters])
+
+  // -- Debounced search -------------------------------------------------------
+  useEffect(() => {
+    const hasFilters = Object.values(filters).some(v => v != null)
+    if (!query.trim() && !hasFilters) {
+      setHasSearched(false)
       setResults([])
       return
     }
-    setLoading(true)
-    setSearched(true)
-    try {
-      const params: Record<string, string> = { q }
-      if (type) params.type = type
-      const res = await catalogApi.search(params)
-      setResults(Array.isArray(res.data) ? res.data : [])
-    } catch {
-      setResults([])
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  // Debounced search
-  useEffect(() => {
-    const timer = setTimeout(() => doSearch(query, filter), 300)
+    const timer = setTimeout(async () => {
+      setLoading(true)
+      setHasSearched(true)
+      try {
+        const params: Record<string, string | number> = { sort, page, page_size: 20 }
+        if (query.trim()) params.q = query
+        Object.entries(filters).forEach(([k, v]) => { if (v) params[k] = v })
+        const res = await catalogApi.search(params)
+        const body: SearchResponse = res.data
+        setResults(body.results ?? [])
+        setTotal(body.total ?? 0)
+      } catch {
+        setResults([])
+        setTotal(0)
+      } finally {
+        setLoading(false)
+      }
+    }, 300)
     return () => clearTimeout(timer)
-  }, [query, filter, doSearch])
+  }, [query, sort, page, filters])
+
+  // -- Handlers ---------------------------------------------------------------
+  const handleFilterChange = (key: string, value: string | undefined) => {
+    setPage(1)
+    setFilters(prev => ({ ...prev, [key]: value }))
+    updateUrl({ [key]: value, page: '1' })
+  }
+
+  const handleLoadSaved = (q: string, savedFilters: Record<string, string>) => {
+    setQuery(q)
+    setFilters(f => ({ ...f, ...savedFilters }))
+    setPage(1)
+    updateUrl({ q, ...savedFilters, page: '1' })
+  }
+
+  // suppress unused warning for facetLoading
+  void facetLoading
 
   return (
     <div className="p-8">
@@ -166,77 +203,132 @@ export default function CatalogPage() {
         storageKey="catalog"
         title="How Data Catalog Works"
         steps={[
-          { icon: <Database size={13} />, title: 'Register Tables', description: 'Add Snowflake tables as data assets under a domain and subdomain.' },
-          { icon: <Search size={13} />, title: 'Search & Discover', description: 'Search across assets, glossary terms, and data products by name, description, or owner.' },
-          { icon: <Filter size={13} />, title: 'Filter Results', description: 'Narrow results by entity type, domain, classification, or certification status.' },
-          { icon: <Tag size={13} />, title: 'View Details', description: 'Click any result to see quality scores, lineage graph, column metadata, and certifications.' },
+          { icon: <Database size={13} />, title: 'Register Tables',    description: 'Add Snowflake tables as data assets under a domain.' },
+          { icon: <Search   size={13} />, title: 'Search & Discover',  description: 'Full-text search across assets, glossary terms, and data products.' },
+          { icon: <SlidersHorizontal size={13} />, title: 'Filter & Sort', description: 'Narrow by domain, classification, certification, or tag.' },
+          { icon: <Tag      size={13} />, title: 'View Details',       description: 'Click any result to see quality scores, lineage, and certifications.' },
         ]}
       />
 
-      {/* Search bar */}
-      <div className="relative mb-5">
-        <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-        <input
-          type="text"
-          placeholder="Search assets, glossary terms, data products..."
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-sm"
-        />
-        {loading && (
-          <Loader2 size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-blue-500 animate-spin" />
-        )}
-      </div>
+      {/* Search bar row */}
+      <div className="flex items-center gap-3 mb-3">
+        <div className="relative flex-1">
+          <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Search assets, glossary terms, data products..."
+            value={query}
+            onChange={e => { setQuery(e.target.value); setPage(1) }}
+            className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-sm"
+          />
+          {loading && <Loader2 size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-blue-500 animate-spin" />}
+        </div>
 
-      {/* Filter pills */}
-      <div className="flex gap-2 mb-6">
-        {FILTER_TABS.map(tab => (
-          <button
-            key={tab.value}
-            onClick={() => setFilter(tab.value)}
-            className={clsx(
-              'px-4 py-1.5 rounded-full text-sm font-medium transition-colors',
-              filter === tab.value
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            )}
-          >
-            {tab.label}
+        <select value={sort} onChange={e => { setSort(e.target.value); setPage(1) }}
+          className="border border-gray-200 rounded-xl px-3 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+          {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+
+        <div className="flex border border-gray-200 rounded-xl overflow-hidden">
+          <button onClick={() => setViewMode('card')}
+            className={clsx('p-2.5', viewMode === 'card' ? 'bg-blue-600 text-white' : 'bg-white text-gray-400 hover:bg-gray-50')}>
+            <LayoutGrid size={16} />
           </button>
-        ))}
+          <button onClick={() => setViewMode('table')}
+            className={clsx('p-2.5', viewMode === 'table' ? 'bg-blue-600 text-white' : 'bg-white text-gray-400 hover:bg-gray-50')}>
+            <List size={16} />
+          </button>
+        </div>
+
+        <SavedSearches currentQuery={query} currentFilters={filters} onLoad={handleLoadSaved} />
       </div>
 
-      {/* Results or popular */}
-      {searched ? (
-        loading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
-          </div>
-        ) : results.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24">
-            <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
-              <Search size={28} className="text-gray-400" />
-            </div>
-            <p className="text-base font-semibold text-gray-800">No results found</p>
-            <p className="text-sm text-gray-400 mt-1">Try a different search term or filter</p>
-          </div>
-        ) : (
-          <div>
-            <p className="text-xs text-gray-500 mb-3">{results.length} result{results.length !== 1 ? 's' : ''} for &ldquo;{query}&rdquo;</p>
-            <div className="space-y-3">
-              {results.map(item => <ResultCard key={item.id} item={item} />)}
-            </div>
-          </div>
-        )
-      ) : (
-        popularLoading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
-          </div>
-        ) : (
-          <PopularGrid items={popular} innerRef={popularRef} />
-        )
-      )}
+      {/* Quick filters */}
+      <QuickFilters activeFilters={filters} userEmail={user?.email ?? ''} onChange={handleFilterChange} />
+
+      {/* Two-column layout */}
+      <div className="flex gap-6">
+        <CatalogFacets
+          facets={facets}
+          filters={{
+            domain_id:      filters.domain_id,
+            classification: filters.classification,
+            certification:  filters.certification,
+            tag:            filters.tag,
+          }}
+          onChange={(key, value) => handleFilterChange(key, value)}
+        />
+
+        <div className="flex-1 min-w-0">
+          {hasSearched ? (
+            loading ? (
+              <div className={viewMode === 'card' ? 'grid grid-cols-1 lg:grid-cols-2 gap-3' : 'space-y-2'}>
+                {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
+              </div>
+            ) : results.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-24">
+                <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
+                  <Search size={28} className="text-gray-400" />
+                </div>
+                <p className="text-base font-semibold text-gray-800">No results found</p>
+                <p className="text-sm text-gray-400 mt-1">Try a different search term or filter</p>
+              </div>
+            ) : (
+              <>
+                <p className="text-xs text-gray-500 mb-3">
+                  {total} result{total !== 1 ? 's' : ''}{query ? ` for "${query}"` : ''}
+                </p>
+                {viewMode === 'card' ? (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    {results.map(item => <CatalogResultCard key={item.id} item={item} />)}
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-100 bg-gray-50">
+                          {['Name', 'Domain', 'Owner', 'Quality', 'Certification', 'Rating'].map(h => (
+                            <th key={h} className="text-left text-xs font-semibold text-gray-500 px-3 py-2">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {results.map(item => <CatalogResultRow key={item.id} item={item} />)}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                <Pagination page={page} total={total} pageSize={20}
+                  onChange={p => { setPage(p); updateUrl({ page: String(p) }) }} />
+              </>
+            )
+          ) : (
+            popularLoading ? (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
+              </div>
+            ) : popular.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-24">
+                <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
+                  <Database size={28} className="text-gray-400" />
+                </div>
+                <p className="text-base font-semibold text-gray-800">No data assets registered yet</p>
+                <p className="text-sm text-gray-400 mt-1">Register your first Snowflake table to get started</p>
+                <a href="/assets" className="mt-4 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">
+                  Register your first table →
+                </a>
+              </div>
+            ) : (
+              <div>
+                <h2 className="text-sm font-semibold text-gray-700 mb-3">Popular Assets</h2>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  {popular.map(item => <CatalogResultCard key={item.id} item={item} />)}
+                </div>
+              </div>
+            )
+          )}
+        </div>
+      </div>
     </div>
   )
 }
