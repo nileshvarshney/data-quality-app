@@ -298,10 +298,30 @@ async def load_all_schedules(db):
     logger.info(f"Loaded {loaded} schedule(s) from database into APScheduler")
 
 
+async def _refresh_catalog_index() -> None:
+    """Nightly job: refresh catalog_search_index materialized view."""
+    import logging
+    _log = logging.getLogger("dq_platform.catalog")
+    from app.db.database import AsyncSessionLocal
+    from app.services.catalog_service import refresh_search_index as _refresh
+    try:
+        async with AsyncSessionLocal() as db:
+            ms = await _refresh(db)
+        _log.info("Nightly catalog index refresh complete in %dms", ms)
+    except Exception as exc:
+        _log.error("Nightly catalog index refresh failed: %s", exc)
+
+
 def start_scheduler():
     if not scheduler.running:
         scheduler.start()
         logger.info("APScheduler started")
+        scheduler.add_job(
+            _refresh_catalog_index,
+            trigger=CronTrigger(hour=0, minute=30, timezone=settings.default_timezone),
+            id="catalog_index_refresh",
+            replace_existing=True,
+        )
 
 
 def stop_scheduler():
