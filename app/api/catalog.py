@@ -1,127 +1,438 @@
-from fastapi import APIRouter, Depends, Query, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc
+import asyncio
+import json
+import logging
+import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Optional
+
+from fastapi import APIRouter, Depends, Query, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, text, desc
 
 from app.db.database import get_db
 from app.db.models import (
     DataAsset, GlossaryTerm, DataProduct, AssetUsage,
-    DQQualityScore, DataClassification, GlossaryTermAsset, Domain,
+    DQQualityScore, DataClassification, GlossaryTermAsset,
+    Domain, DataLineage, AssetTag, Tag,
 )
-from app.core.security import get_current_user
+from app.core.security import get_current_user, require_admin
+from app.services.catalog_service import refresh_search_index, enrich_asset_results
 
 router = APIRouter(prefix="/catalog", tags=["Catalog"])
+logger = logging.getLogger("dq_platform.catalog")
+
+_utcnow = lambda: datetime.now(timezone.utc).replace(tzinfo=None)
 
 
-def _now() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+def _gen_id() -> str:
+    return str(uuid.uuid4())
 
 
-def _thirty_days_ago() -> datetime:
-    return _now() - timedelta(days=30)
+async def _domain_map(db: AsyncSession) -> dict:
+    result = await db.execute(select(Domain.domain_id, Domain.domain_name))
+    return {r.domain_id: r.domain_name for r in result.all()}
+
+
+async def _search_via_ilike(
+    db: AsyncSession,
+    q: str,
+    effective_type: Optional[str],
+    domain_id: Optional[str],
+    certification: Optional[str],
+    limit: int,
+    offset: int,
+) -> tuple[list[dict], int]:
+    """ILIKE fallback when catalog_search_index is unavailable."""
+    domain_names = await _domain_map(db)
+    results: list[dict] = []
+    pattern = f"%{q}%" if q else "%"
+
+    if not effective_type or effective_type == "asset":
+        q_stmt = select(DataAsset)
+        if q:
+            q_stmt = q_stmt.where(
+                DataAsset.sf_table_name.ilike(pattern)
+                | DataAsset.table_description.ilike(pattern)
+                | DataAsset.owner_name.ilike(pattern)
+            )
+        if domain_id:
+            q_stmt = q_stmt.where(DataAsset.domain_id == domain_id)
+        if certification:
+            q_stmt = q_stmt.where(DataAsset.certification_status == certification)
+        for a in (await db.execute(q_stmt)).scalars().all():
+            results.append({
+                "entity_type": "asset", "id": a.asset_id,
+                "name": a.sf_table_name, "description": a.table_description,
+                "domain": domain_names.get(a.domain_id), "owner": a.owner_name or a.owner_email,
+                "certification_status": a.certification_status,
+                "quality_score": None, "trust_score": None, "avg_rating": None,
+                "classification_tags": [], "tag_names": [],
+            })
+
+    if not effective_type or effective_type == "glossary":
+        g_stmt = select(GlossaryTerm)
+        if q:
+            g_stmt = g_stmt.where(
+                GlossaryTerm.term_name.ilike(pattern)
+                | GlossaryTerm.definition.ilike(pattern)
+            )
+        if domain_id:
+            g_stmt = g_stmt.where(GlossaryTerm.domain_id == domain_id)
+        for t in (await db.execute(g_stmt)).scalars().all():
+            results.append({
+                "entity_type": "glossary", "id": t.term_id,
+                "name": t.term_name, "description": t.definition,
+                "domain": domain_names.get(t.domain_id), "owner": t.owner_email,
+                "certification_status": None, "quality_score": None, "trust_score": None,
+                "avg_rating": None, "classification_tags": [], "tag_names": [],
+            })
+
+    if not effective_type or effective_type == "data_product":
+        p_stmt = select(DataProduct)
+        if q:
+            p_stmt = p_stmt.where(
+                DataProduct.product_name.ilike(pattern)
+                | DataProduct.description.ilike(pattern)
+            )
+        if domain_id:
+            p_stmt = p_stmt.where(DataProduct.domain_id == domain_id)
+        for p in (await db.execute(p_stmt)).scalars().all():
+            results.append({
+                "entity_type": "data_product", "id": p.product_id,
+                "name": p.product_name, "description": p.description,
+                "domain": domain_names.get(p.domain_id), "owner": p.owner_email,
+                "certification_status": p.status, "quality_score": None, "trust_score": None,
+                "avg_rating": None, "classification_tags": [], "tag_names": [],
+            })
+
+    total = len(results)
+    return results[offset: offset + limit], total
 
 
 @router.get("/search")
 async def catalog_search(
-    q: Optional[str] = Query(None, description="Search text"),
-    type: Optional[str] = Query(None, description="Filter by type: asset, glossary, data_product"),
-    entity_type: Optional[str] = Query(None, description="Alias for type"),
+    q: Optional[str] = Query(None),
+    type: Optional[str] = Query(None),
+    entity_type: Optional[str] = Query(None),
     domain_id: Optional[str] = Query(None),
-    limit: int = Query(20, ge=1, le=100),
+    classification: Optional[str] = Query(None),
+    certification: Optional[str] = Query(None),
+    owner: Optional[str] = Query(None),
+    tag: Optional[str] = Query(None),
+    sort: str = Query("relevance"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
-    """
-    Unified search across assets, glossary terms, and data products.
-    Returns a combined list with an entity_type field.
-    """
-    # Accept both param names; 'type' wins over 'entity_type'
+    """Full-text catalog search across assets, glossary terms, and data products."""
     effective_type = type or entity_type
+    offset = (page - 1) * page_size
 
-    # Pre-load domain name map
-    domains_result = await db.execute(select(Domain.domain_id, Domain.domain_name))
-    domain_map: dict = {row.domain_id: row.domain_name for row in domains_result.all()}
+    # Resolve classification filter → entity_ids
+    class_ids: Optional[set[str]] = None
+    if classification:
+        class_result = await db.execute(
+            select(DataClassification.asset_id)
+            .where(DataClassification.classification == classification)
+        )
+        class_ids = {r.asset_id for r in class_result.all()}
 
-    results = []
-    search_term = f"%{q}%" if q else "%"
+    # Resolve tag filter → entity_ids
+    tag_ids: Optional[set[str]] = None
+    if tag:
+        tag_result = await db.execute(
+            select(AssetTag.entity_id)
+            .join(Tag, AssetTag.tag_id == Tag.tag_id)
+            .where(AssetTag.entity_type == "asset", Tag.tag_name == tag)
+        )
+        tag_ids = {r.entity_id for r in tag_result.all()}
 
-    # Search DataAsset
-    if not effective_type or effective_type == "asset":
-        asset_q = select(DataAsset)
-        if q:
-            asset_q = asset_q.where(
-                DataAsset.sf_table_name.ilike(search_term)
-                | DataAsset.table_description.ilike(search_term)
-                | DataAsset.owner_name.ilike(search_term)
-            )
+    try:
+        where_clauses = ["1=1"]
+        params: dict = {}
+
+        if q and q.strip():
+            where_clauses.append("search_vector @@ plainto_tsquery('english', :q)")
+            params["q"] = q.strip()
+
+        if effective_type:
+            where_clauses.append("entity_type = :etype")
+            params["etype"] = effective_type
+
         if domain_id:
-            asset_q = asset_q.where(DataAsset.domain_id == domain_id)
-        asset_q = asset_q.limit(limit)
-        asset_result = await db.execute(asset_q)
-        for asset in asset_result.scalars().all():
-            results.append({
-                "entity_type": "asset",
-                "id": asset.asset_id,
-                "name": asset.sf_table_name,
-                "description": asset.table_description,
-                "domain": domain_map.get(asset.domain_id),
-                "owner": asset.owner_name or asset.owner_email,
-                "sf_schema_name": asset.sf_schema_name,
-                "criticality": asset.criticality,
-                "certification_status": getattr(asset, "certification_status", None),
-                "updated_at": asset.updated_at.isoformat() if asset.updated_at else None,
-            })
+            where_clauses.append("domain_id = :domain_id")
+            params["domain_id"] = domain_id
 
-    # Search GlossaryTerm
-    if not effective_type or effective_type == "glossary":
-        glossary_q = select(GlossaryTerm)
-        if q:
-            glossary_q = glossary_q.where(
-                GlossaryTerm.term_name.ilike(search_term)
-                | GlossaryTerm.definition.ilike(search_term)
-            )
-        if domain_id:
-            glossary_q = glossary_q.where(GlossaryTerm.domain_id == domain_id)
-        glossary_q = glossary_q.limit(limit)
-        glossary_result = await db.execute(glossary_q)
-        for term in glossary_result.scalars().all():
-            results.append({
-                "entity_type": "glossary",
-                "id": term.term_id,
-                "name": term.term_name,
-                "description": term.definition,
-                "domain": domain_map.get(term.domain_id),
-                "owner": term.owner_email,
-                "status": term.status,
-                "updated_at": term.updated_at.isoformat() if term.updated_at else None,
-            })
+        if certification:
+            where_clauses.append("certification_status = :cert")
+            params["cert"] = certification
 
-    # Search DataProduct
-    if not effective_type or effective_type == "data_product":
-        product_q = select(DataProduct)
-        if q:
-            product_q = product_q.where(
-                DataProduct.product_name.ilike(search_term)
-                | DataProduct.description.ilike(search_term)
-            )
-        if domain_id:
-            product_q = product_q.where(DataProduct.domain_id == domain_id)
-        product_q = product_q.limit(limit)
-        product_result = await db.execute(product_q)
-        for product in product_result.scalars().all():
-            results.append({
-                "entity_type": "data_product",
-                "id": product.product_id,
-                "name": product.product_name,
-                "description": product.description,
-                "domain": domain_map.get(product.domain_id),
-                "owner": product.owner_email,
-                "status": product.status,
-                "updated_at": product.updated_at.isoformat() if product.updated_at else None,
-            })
+        if owner:
+            where_clauses.append("owner ILIKE :owner")
+            params["owner"] = f"%{owner}%"
 
-    return results[:limit]
+        if class_ids is not None:
+            if not class_ids:
+                return {"results": [], "total": 0, "page": page, "page_size": page_size}
+            where_clauses.append("entity_id = ANY(:class_ids) AND entity_type = 'asset'")
+            params["class_ids"] = list(class_ids)
+
+        if tag_ids is not None:
+            if not tag_ids:
+                return {"results": [], "total": 0, "page": page, "page_size": page_size}
+            where_clauses.append("entity_id = ANY(:tag_ids) AND entity_type = 'asset'")
+            params["tag_ids"] = list(tag_ids)
+
+        where_sql = " AND ".join(where_clauses)
+
+        if sort == "relevance" and q and q.strip():
+            order_sql = "ts_rank(search_vector, plainto_tsquery('english', :q)) DESC"
+        elif sort == "alphabetical":
+            order_sql = "title ASC"
+        else:
+            order_sql = "title ASC"
+
+        count_result = await db.execute(
+            text(f"SELECT count(*) FROM catalog_search_index WHERE {where_sql}"),
+            params,
+        )
+        total: int = count_result.scalar() or 0
+
+        rows_result = await db.execute(
+            text(
+                f"SELECT entity_type, entity_id, title, domain, description, owner, "
+                f"certification_status, domain_id "
+                f"FROM catalog_search_index "
+                f"WHERE {where_sql} "
+                f"ORDER BY {order_sql} "
+                f"LIMIT :limit OFFSET :offset"
+            ),
+            {**params, "limit": page_size, "offset": offset},
+        )
+        rows = rows_result.mappings().all()
+
+        asset_ids = [r["entity_id"] for r in rows if r["entity_type"] == "asset"]
+        enrichment = await enrich_asset_results(asset_ids, db)
+
+        results = []
+        for r in rows:
+            base = {
+                "entity_type": r["entity_type"],
+                "id": r["entity_id"],
+                "name": r["title"],
+                "description": r["description"],
+                "domain": r["domain"],
+                "owner": r["owner"],
+                "certification_status": r["certification_status"],
+            }
+            if r["entity_type"] == "asset":
+                base.update(enrichment.get(r["entity_id"], {
+                    "quality_score": None, "trust_score": None,
+                    "avg_rating": None, "classification_tags": [], "tag_names": [],
+                }))
+            else:
+                base.update({
+                    "quality_score": None, "trust_score": None,
+                    "avg_rating": None, "classification_tags": [], "tag_names": [],
+                })
+            results.append(base)
+
+        if sort == "quality":
+            results.sort(key=lambda x: x.get("quality_score") or 0, reverse=True)
+        elif sort == "trust":
+            results.sort(key=lambda x: x.get("trust_score") or 0, reverse=True)
+
+        return {"results": results, "total": total, "page": page, "page_size": page_size}
+
+    except Exception as exc:
+        logger.warning("tsvector search failed (%s), falling back to ILIKE", exc)
+        fallback_results, total = await _search_via_ilike(
+            db, q or "", effective_type, domain_id, certification, page_size, offset
+        )
+        return {"results": fallback_results, "total": total, "page": page, "page_size": page_size}
+
+
+@router.get("/facets")
+async def catalog_facets(
+    domain_id: Optional[str] = Query(None),
+    type: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    """Return sidebar facet counts."""
+
+    async def _domain_counts():
+        stmt = (
+            select(Domain.domain_id, Domain.domain_name, func.count(DataAsset.asset_id).label("cnt"))
+            .join(DataAsset, DataAsset.domain_id == Domain.domain_id)
+            .where(DataAsset.is_active == True)  # noqa: E712
+            .group_by(Domain.domain_id, Domain.domain_name)
+            .order_by(desc("cnt"))
+        )
+        res = await db.execute(stmt)
+        return [{"id": r.domain_id, "name": r.domain_name, "count": r.cnt} for r in res.all()]
+
+    async def _classification_counts():
+        stmt = (
+            select(DataClassification.classification, func.count().label("cnt"))
+            .group_by(DataClassification.classification)
+            .order_by(desc("cnt"))
+        )
+        res = await db.execute(stmt)
+        return [{"value": r.classification, "count": r.cnt} for r in res.all()]
+
+    async def _certification_counts():
+        stmt = (
+            select(DataAsset.certification_status, func.count().label("cnt"))
+            .where(DataAsset.is_active == True)  # noqa: E712
+            .group_by(DataAsset.certification_status)
+            .order_by(desc("cnt"))
+        )
+        res = await db.execute(stmt)
+        return [{"value": r.certification_status, "count": r.cnt} for r in res.all()]
+
+    async def _tag_counts():
+        stmt = (
+            select(Tag.tag_name, func.count(AssetTag.id).label("cnt"))
+            .join(AssetTag, AssetTag.tag_id == Tag.tag_id)
+            .where(AssetTag.entity_type == "asset")
+            .group_by(Tag.tag_name)
+            .order_by(desc("cnt"))
+            .limit(20)
+        )
+        res = await db.execute(stmt)
+        return [{"name": r.tag_name, "count": r.cnt} for r in res.all()]
+
+    domains, classifications, certifications, tags = await asyncio.gather(
+        _domain_counts(), _classification_counts(), _certification_counts(), _tag_counts()
+    )
+    return {
+        "domains": domains,
+        "classifications": classifications,
+        "certifications": certifications,
+        "tags": tags,
+    }
+
+
+@router.get("/assets/{asset_id}")
+async def catalog_asset_detail(
+    asset_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    """Enriched single-asset detail for catalog view."""
+    asset_result = await db.execute(
+        select(DataAsset, Domain.domain_name)
+        .join(Domain, DataAsset.domain_id == Domain.domain_id)
+        .where(DataAsset.asset_id == asset_id)
+    )
+    row = asset_result.first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    asset, domain_name = row
+
+    enrichment = await enrich_asset_results([asset_id], db)
+    enrich = enrichment.get(asset_id, {})
+
+    upstream_count = (await db.execute(
+        select(func.count()).where(DataLineage.downstream_asset_id == asset_id)
+    )).scalar() or 0
+    downstream_count = (await db.execute(
+        select(func.count()).where(DataLineage.upstream_asset_id == asset_id)
+    )).scalar() or 0
+
+    return {
+        "asset_id": asset.asset_id,
+        "sf_table_name": asset.sf_table_name,
+        "sf_schema_name": asset.sf_schema_name,
+        "sf_database_name": asset.sf_database_name,
+        "table_description": asset.table_description,
+        "criticality": asset.criticality,
+        "certification_status": asset.certification_status,
+        "certified_by": asset.certified_by,
+        "owner_name": asset.owner_name,
+        "owner_email": asset.owner_email,
+        "domain_id": asset.domain_id,
+        "domain_name": domain_name,
+        "updated_at": asset.updated_at.isoformat() if asset.updated_at else None,
+        "upstream_count": upstream_count,
+        "downstream_count": downstream_count,
+        **enrich,
+    }
+
+
+@router.post("/saved-searches")
+async def create_saved_search(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    search_id = _gen_id()
+    await db.execute(
+        text("""
+            INSERT INTO saved_searches (search_id, user_email, name, query, filters, created_at)
+            VALUES (:id, :email, :name, :query, CAST(:filters AS jsonb), NOW())
+        """),
+        {
+            "id": search_id,
+            "email": user["email"],
+            "name": payload.get("name", "Saved search"),
+            "query": payload.get("query"),
+            "filters": json.dumps(payload.get("filters")) if payload.get("filters") else None,
+        },
+    )
+    await db.commit()
+    return {"search_id": search_id}
+
+
+@router.get("/saved-searches")
+async def list_saved_searches(
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    result = await db.execute(
+        text("""
+            SELECT search_id, name, query, filters, created_at
+            FROM saved_searches
+            WHERE user_email = :email
+            ORDER BY created_at DESC
+        """),
+        {"email": user["email"]},
+    )
+    return [dict(r._mapping) for r in result.all()]
+
+
+@router.delete("/saved-searches/{search_id}")
+async def delete_saved_search(
+    search_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    existing = await db.execute(
+        text("SELECT user_email FROM saved_searches WHERE search_id = :id"),
+        {"id": search_id},
+    )
+    row = existing.first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Saved search not found")
+    if row.user_email != user["email"] and user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Cannot delete another user's saved search")
+    await db.execute(
+        text("DELETE FROM saved_searches WHERE search_id = :id"), {"id": search_id}
+    )
+    await db.commit()
+    return {"deleted": search_id}
+
+
+@router.post("/refresh", dependencies=[Depends(require_admin)])
+async def refresh_catalog(
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    """Manually trigger catalog_search_index refresh. Admin only."""
+    ms = await refresh_search_index(db)
+    return {"status": "refreshed", "duration_ms": ms}
 
 
 @router.get("/popular")
@@ -129,12 +440,8 @@ async def catalog_popular(
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
-    """Top 10 most-used assets. Falls back to most recently registered assets when no usage data exists."""
-    # Pre-load domain name map
-    domains_result = await db.execute(select(Domain.domain_id, Domain.domain_name))
-    domain_map: dict = {row.domain_id: row.domain_name for row in domains_result.all()}
-
-    cutoff = _thirty_days_ago()
+    cutoff = _utcnow() - timedelta(days=30)
+    domain_names = await _domain_map(db)
     usage_result = await db.execute(
         select(AssetUsage.asset_id, func.count().label("usage_count"))
         .where(AssetUsage.created_at >= cutoff)
@@ -147,33 +454,28 @@ async def catalog_popular(
     usage_map = {r.asset_id: r.usage_count for r in rows}
 
     if asset_ids:
-        assets_result = await db.execute(
+        assets = (await db.execute(
             select(DataAsset).where(DataAsset.asset_id.in_(asset_ids))
-        )
-        assets = assets_result.scalars().all()
+        )).scalars().all()
     else:
-        # Fallback: return all active assets ordered by domain + table name
-        # so every domain is represented in the browse view
-        fallback = await db.execute(
+        assets = (await db.execute(
             select(DataAsset)
             .where(DataAsset.is_active == True)  # noqa: E712
             .order_by(DataAsset.domain_id, DataAsset.sf_table_name)
             .limit(50)
-        )
-        assets = fallback.scalars().all()
+        )).scalars().all()
 
-    def _fmt(a: DataAsset) -> dict:
-        return {
-            "entity_type": "asset",
-            "id": a.asset_id,
-            "name": a.sf_table_name,
-            "description": a.table_description,
-            "domain": domain_map.get(a.domain_id),
+    return [
+        {
+            "entity_type": "asset", "id": a.asset_id,
+            "name": a.sf_table_name, "description": a.table_description,
+            "domain": domain_names.get(a.domain_id),
             "owner": a.owner_name or a.owner_email,
             "usage_count": usage_map.get(a.asset_id, 0),
+            "certification_status": a.certification_status,
         }
-
-    return [_fmt(a) for a in assets]
+        for a in assets
+    ]
 
 
 @router.get("/recent")
@@ -181,20 +483,14 @@ async def catalog_recent(
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
-    """Most recently updated data assets (last 10 by updated_at)."""
     result = await db.execute(
-        select(DataAsset)
-        .order_by(desc(DataAsset.updated_at))
-        .limit(10)
+        select(DataAsset).order_by(desc(DataAsset.updated_at)).limit(10)
     )
     return [
         {
-            "asset_id": a.asset_id,
-            "sf_table_name": a.sf_table_name,
-            "sf_schema_name": a.sf_schema_name,
-            "sf_database_name": a.sf_database_name,
-            "domain_id": a.domain_id,
-            "subdomain_id": a.subdomain_id,
+            "asset_id": a.asset_id, "sf_table_name": a.sf_table_name,
+            "sf_schema_name": a.sf_schema_name, "sf_database_name": a.sf_database_name,
+            "domain_id": a.domain_id, "subdomain_id": a.subdomain_id,
             "table_description": a.table_description,
             "certification_status": a.certification_status,
             "updated_at": a.updated_at.isoformat() if a.updated_at else None,
@@ -209,68 +505,36 @@ async def catalog_domain_assets(
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
-    """
-    Enriched asset list for a domain with quality score,
-    certification status, classification count, and term count per asset.
-    """
-    assets_result = await db.execute(
-        select(DataAsset).where(
-            DataAsset.domain_id == domain_id,
-            DataAsset.is_active == True,  # noqa: E712
-        ).order_by(DataAsset.sf_table_name)
-    )
-    assets = assets_result.scalars().all()
+    assets = (await db.execute(
+        select(DataAsset)
+        .where(DataAsset.domain_id == domain_id, DataAsset.is_active == True)  # noqa: E712
+        .order_by(DataAsset.sf_table_name)
+    )).scalars().all()
     if not assets:
         return []
-
     asset_ids = [a.asset_id for a in assets]
+    enrichment = await enrich_asset_results(asset_ids, db)
 
-    # Latest quality scores per asset
-    scores_result = await db.execute(
-        select(
-            DQQualityScore.asset_id,
-            func.avg(DQQualityScore.quality_score).label("avg_quality"),
-        )
-        .where(
-            DQQualityScore.asset_id.in_(asset_ids),
-            DQQualityScore.score_level == "table",
-        )
-        .group_by(DQQualityScore.asset_id)
-    )
-    quality_map = {r.asset_id: round(float(r.avg_quality), 2) for r in scores_result.all()}
-
-    # Classification counts per asset
-    class_result = await db.execute(
-        select(DataClassification.asset_id, func.count().label("classification_count"))
-        .where(DataClassification.asset_id.in_(asset_ids))
-        .group_by(DataClassification.asset_id)
-    )
-    classification_map = {r.asset_id: r.classification_count for r in class_result.all()}
-
-    # Glossary term counts per asset
-    terms_result = await db.execute(
+    term_result = await db.execute(
         select(GlossaryTermAsset.asset_id, func.count().label("term_count"))
         .where(GlossaryTermAsset.asset_id.in_(asset_ids))
         .group_by(GlossaryTermAsset.asset_id)
     )
-    term_map = {r.asset_id: r.term_count for r in terms_result.all()}
+    term_map = {r.asset_id: r.term_count for r in term_result.all()}
 
     return [
         {
-            "asset_id": a.asset_id,
-            "sf_table_name": a.sf_table_name,
-            "sf_schema_name": a.sf_schema_name,
-            "sf_database_name": a.sf_database_name,
-            "table_description": a.table_description,
-            "criticality": a.criticality,
-            "certification_status": a.certification_status,
-            "certified_by": a.certified_by,
-            "owner_name": a.owner_name,
-            "owner_email": a.owner_email,
-            "quality_score": quality_map.get(a.asset_id),
-            "classification_count": classification_map.get(a.asset_id, 0),
+            "asset_id": a.asset_id, "sf_table_name": a.sf_table_name,
+            "sf_schema_name": a.sf_schema_name, "sf_database_name": a.sf_database_name,
+            "table_description": a.table_description, "criticality": a.criticality,
+            "certification_status": a.certification_status, "certified_by": a.certified_by,
+            "owner_name": a.owner_name, "owner_email": a.owner_email,
             "term_count": term_map.get(a.asset_id, 0),
             "updated_at": a.updated_at.isoformat() if a.updated_at else None,
+            **enrichment.get(a.asset_id, {
+                "quality_score": None, "trust_score": None, "avg_rating": None,
+                "classification_tags": [], "tag_names": [],
+            }),
         }
         for a in assets
     ]
