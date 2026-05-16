@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Search, Loader2, LayoutGrid, List, SlidersHorizontal, Database, Tag } from 'lucide-react'
 import clsx from 'clsx'
@@ -119,12 +119,16 @@ export default function CatalogPage() {
   const [popularLoading, setPopularLoading] = useState(true)
   const [hasSearched,    setHasSearched]    = useState(!!searchParams.get('q'))
 
-  // -- Sync state → URL -------------------------------------------------------
-  const updateUrl = useCallback((overrides: Record<string, string | undefined>) => {
+  // -- Sync all state → URL on any change -------------------------------------
+  useEffect(() => {
     const params = new URLSearchParams()
-    const merged = { q: query, sort, view: viewMode, page: String(page), ...filters, ...overrides }
-    Object.entries(merged).forEach(([k, v]) => { if (v) params.set(k, v) })
-    router.replace(`/catalog?${params.toString()}`, { scroll: false })
+    if (query)    params.set('q',    query)
+    if (sort && sort !== 'relevance') params.set('sort', sort)
+    if (viewMode && viewMode !== 'card') params.set('view', viewMode)
+    if (page > 1) params.set('page', String(page))
+    Object.entries(filters).forEach(([k, v]) => { if (v) params.set(k, v) })
+    const newUrl = `/catalog${params.toString() ? `?${params.toString()}` : ''}`
+    router.replace(newUrl, { scroll: false })
   }, [query, sort, viewMode, page, filters, router])
 
   // -- Load popular on mount ---------------------------------------------------
@@ -178,14 +182,12 @@ export default function CatalogPage() {
   const handleFilterChange = (key: string, value: string | undefined) => {
     setPage(1)
     setFilters(prev => ({ ...prev, [key]: value }))
-    updateUrl({ [key]: value, page: '1' })
   }
 
   const handleLoadSaved = (q: string, savedFilters: Record<string, string>) => {
     setQuery(q)
     setFilters(f => ({ ...f, ...savedFilters }))
     setPage(1)
-    updateUrl({ q, ...savedFilters, page: '1' })
   }
 
   // suppress unused warning for facetLoading
@@ -299,7 +301,7 @@ export default function CatalogPage() {
                   </div>
                 )}
                 <Pagination page={page} total={total} pageSize={20}
-                  onChange={p => { setPage(p); updateUrl({ page: String(p) }) }} />
+                  onChange={p => setPage(p)} />
               </>
             )
           ) : (
