@@ -1,0 +1,853 @@
+import uuid
+from datetime import datetime, timezone
+from sqlalchemy import (
+    String, Boolean, Float, Integer, BigInteger, SmallInteger, Text, DateTime,
+    JSON, ForeignKey, Date, Index, UniqueConstraint,
+)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from app.db.database import Base
+
+
+def gen_uuid() -> str:
+    return str(uuid.uuid4())
+
+
+def now() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    user_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    email: Mapped[str] = mapped_column(String(200), unique=True, nullable=False, index=True)
+    hashed_password: Mapped[str] = mapped_column(Text, nullable=False)
+    full_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    role: Mapped[str] = mapped_column(String(30), nullable=False, default="viewer")
+    domain_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_verified: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_login: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # OAuth2 / SSO
+    oauth_provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    oauth_id: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+
+class Domain(Base):
+    __tablename__ = "domains"
+
+    domain_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    domain_name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    owner_name: Mapped[str | None] = mapped_column(String(200))
+    owner_email: Mapped[str | None] = mapped_column(String(200))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+    subdomains: Mapped[list["Subdomain"]] = relationship("Subdomain", back_populates="domain")
+    assets: Mapped[list["DataAsset"]] = relationship("DataAsset", back_populates="domain")
+    rules: Mapped[list["DQRule"]] = relationship("DQRule", back_populates="domain")
+
+
+class Subdomain(Base):
+    __tablename__ = "subdomains"
+    __table_args__ = (
+        UniqueConstraint("domain_id", "subdomain_name", name="uq_subdomain_name_per_domain"),
+    )
+
+    subdomain_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    domain_id: Mapped[str] = mapped_column(String(36), ForeignKey("domains.domain_id"), nullable=False)
+    subdomain_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    owner_name: Mapped[str | None] = mapped_column(String(200))
+    owner_email: Mapped[str | None] = mapped_column(String(200))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+    domain: Mapped["Domain"] = relationship("Domain", back_populates="subdomains")
+    assets: Mapped[list["DataAsset"]] = relationship("DataAsset", back_populates="subdomain")
+    rules: Mapped[list["DQRule"]] = relationship("DQRule", back_populates="subdomain")
+
+
+class DataAsset(Base):
+    __tablename__ = "data_assets"
+
+    asset_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    domain_id: Mapped[str] = mapped_column(String(36), ForeignKey("domains.domain_id"), nullable=False)
+    subdomain_id: Mapped[str] = mapped_column(String(36), ForeignKey("subdomains.subdomain_id"), nullable=False)
+    connection_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    snowflake_account: Mapped[str | None] = mapped_column(String(200))
+    sf_database_name: Mapped[str | None] = mapped_column(String(200))
+    sf_schema_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    sf_table_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    table_type: Mapped[str | None] = mapped_column(String(50))
+    table_description: Mapped[str | None] = mapped_column(Text)
+    owner_name: Mapped[str | None] = mapped_column(String(200))
+    owner_email: Mapped[str | None] = mapped_column(String(200))
+    technical_owner_name: Mapped[str | None] = mapped_column(String(200))
+    technical_owner_email: Mapped[str | None] = mapped_column(String(200))
+    criticality: Mapped[str] = mapped_column(String(20), default="medium")
+    certification_status: Mapped[str] = mapped_column(String(20), default="uncertified")
+    certified_by: Mapped[str | None] = mapped_column(String(200))
+    certified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+    domain: Mapped["Domain"] = relationship("Domain", back_populates="assets")
+    subdomain: Mapped["Subdomain"] = relationship("Subdomain", back_populates="assets")
+    rules: Mapped[list["DQRule"]] = relationship("DQRule", back_populates="asset")
+    rule_runs: Mapped[list["DQRuleRun"]] = relationship("DQRuleRun", back_populates="asset")
+
+
+class RuleTag(Base):
+    __tablename__ = "rule_tags"
+
+    tag_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    rule_id: Mapped[str] = mapped_column(String(36), ForeignKey("dq_rules.rule_id"), nullable=False, index=True)
+    tag_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+    rule: Mapped["DQRule"] = relationship("DQRule", back_populates="tags")
+
+
+class SLAConfig(Base):
+    __tablename__ = "sla_configs"
+
+    sla_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    entity_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    entity_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    min_quality_score: Mapped[float] = mapped_column(Float, default=95.0)
+    max_failure_pct: Mapped[float] = mapped_column(Float, default=5.0)
+    alert_on_breach: Mapped[bool] = mapped_column(Boolean, default=True)
+    notification_emails: Mapped[str | None] = mapped_column(Text)
+    notification_slack_channel: Mapped[str | None] = mapped_column(String(200))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+
+class DQRule(Base):
+    __tablename__ = "dq_rules"
+
+    rule_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    rule_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    rule_description: Mapped[str | None] = mapped_column(Text)
+    domain_id: Mapped[str] = mapped_column(String(36), ForeignKey("domains.domain_id"), nullable=False)
+    subdomain_id: Mapped[str] = mapped_column(String(36), ForeignKey("subdomains.subdomain_id"), nullable=False)
+    asset_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_assets.asset_id"), nullable=False)
+    rule_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    rule_category: Mapped[str | None] = mapped_column(String(50))
+    target_column: Mapped[str | None] = mapped_column(String(200))
+    rule_sql: Mapped[str | None] = mapped_column(Text)
+    rule_config: Mapped[dict | None] = mapped_column(JSON)
+    severity: Mapped[str] = mapped_column(String(20), nullable=False, default="medium")
+    status: Mapped[str] = mapped_column(String(30), default="active")
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    sla_threshold: Mapped[float | None] = mapped_column(Float, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_by: Mapped[str | None] = mapped_column(String(200))
+    approved_by: Mapped[str | None] = mapped_column(String(200))
+    rejected_by: Mapped[str | None] = mapped_column(String(200))
+    rejection_reason: Mapped[str | None] = mapped_column(Text)
+    business_owner_name: Mapped[str | None] = mapped_column(String(200))
+    business_owner_email: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+    domain: Mapped["Domain"] = relationship("Domain", back_populates="rules")
+    subdomain: Mapped["Subdomain"] = relationship("Subdomain", back_populates="rules")
+    asset: Mapped["DataAsset"] = relationship("DataAsset", back_populates="rules")
+    rule_runs: Mapped[list["DQRuleRun"]] = relationship("DQRuleRun", back_populates="rule")
+    schedules: Mapped[list["DQSchedule"]] = relationship("DQSchedule", back_populates="rule")
+    tags: Mapped[list["RuleTag"]] = relationship("RuleTag", back_populates="rule", cascade="all, delete-orphan")
+
+
+class RuleVersion(Base):
+    """Immutable snapshot of a rule taken before each update."""
+    __tablename__ = "rule_versions"
+
+    version_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    rule_id: Mapped[str] = mapped_column(String(36), ForeignKey("dq_rules.rule_id"), nullable=False, index=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    rule_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    rule_description: Mapped[str | None] = mapped_column(Text)
+    rule_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    target_column: Mapped[str | None] = mapped_column(String(200))
+    rule_sql: Mapped[str | None] = mapped_column(Text)
+    rule_config: Mapped[dict | None] = mapped_column(JSON)
+    severity: Mapped[str] = mapped_column(String(20), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False)
+    changed_by: Mapped[str | None] = mapped_column(String(200))
+    change_reason: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class DQSchedule(Base):
+    __tablename__ = "dq_schedules"
+
+    schedule_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    rule_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("dq_rules.rule_id"))
+    asset_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("data_assets.asset_id"))
+    subdomain_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("subdomains.subdomain_id"))
+    domain_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("domains.domain_id"))
+    schedule_level: Mapped[str] = mapped_column(String(20), nullable=False)
+    frequency: Mapped[str] = mapped_column(String(20), nullable=False)
+    cron_expression: Mapped[str | None] = mapped_column(String(100))
+    timezone: Mapped[str] = mapped_column(String(50), default="America/Los_Angeles")
+    run_at_hour: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    run_at_minute: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    start_time: Mapped[datetime | None] = mapped_column(DateTime)
+    end_time: Mapped[datetime | None] = mapped_column(DateTime)
+    # Explicit rule bundle for non-rule-level schedules (JSON list of rule_ids).
+    # When set, only these rules execute — new rules are NOT auto-added.
+    rule_ids: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+    rule: Mapped["DQRule | None"] = relationship("DQRule", back_populates="schedules")
+
+
+class DQRuleRun(Base):
+    __tablename__ = "dq_rule_runs"
+    __table_args__ = (
+        Index("ix_rule_runs_rule_created",   "rule_id",   "created_at"),
+        Index("ix_rule_runs_asset_created",  "asset_id",  "created_at"),
+        Index("ix_rule_runs_domain_status",  "domain_id", "status"),
+        Index("ix_rule_runs_subdomain",      "subdomain_id"),
+        Index("ix_rule_runs_status",         "status"),
+        Index("ix_rule_runs_created_at",     "created_at"),
+    )
+
+    run_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    rule_id: Mapped[str] = mapped_column(String(36), ForeignKey("dq_rules.rule_id"), nullable=False)
+    asset_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_assets.asset_id"), nullable=False)
+    domain_id: Mapped[str] = mapped_column(String(36), ForeignKey("domains.domain_id"), nullable=False)
+    subdomain_id: Mapped[str] = mapped_column(String(36), ForeignKey("subdomains.subdomain_id"), nullable=False)
+    execution_start_time: Mapped[datetime | None] = mapped_column(DateTime)
+    execution_end_time: Mapped[datetime | None] = mapped_column(DateTime)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    total_rows_scanned: Mapped[int | None] = mapped_column(Integer)
+    failed_rows_count: Mapped[int | None] = mapped_column(Integer)
+    passed_rows_count: Mapped[int | None] = mapped_column(Integer)
+    failure_percentage: Mapped[float | None] = mapped_column(Float)
+    quality_score: Mapped[float | None] = mapped_column(Float)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    executed_sql: Mapped[str | None] = mapped_column(Text)
+    ai_explanation: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+    rule: Mapped["DQRule"] = relationship("DQRule", back_populates="rule_runs")
+    asset: Mapped["DataAsset"] = relationship("DataAsset", back_populates="rule_runs")
+    samples: Mapped[list["DQRuleRunSample"]] = relationship("DQRuleRunSample", back_populates="run")
+
+
+class DQRuleRunSample(Base):
+    __tablename__ = "dq_rule_run_samples"
+
+    sample_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    run_id: Mapped[str] = mapped_column(String(36), ForeignKey("dq_rule_runs.run_id"), nullable=False)
+    rule_id: Mapped[str] = mapped_column(String(36), ForeignKey("dq_rules.rule_id"), nullable=False, index=True)
+    failed_record: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+    run: Mapped["DQRuleRun"] = relationship("DQRuleRun", back_populates="samples")
+
+
+class DQQualityScore(Base):
+    __tablename__ = "dq_quality_scores"
+    __table_args__ = (
+        Index("ix_quality_scores_date_level",     "score_date", "score_level"),
+        Index("ix_quality_scores_date_domain",    "score_date", "domain_id"),
+        Index("ix_quality_scores_date_subdomain", "score_date", "subdomain_id"),
+        Index("ix_quality_scores_date_asset",     "score_date", "asset_id"),
+    )
+
+    score_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    score_date: Mapped[datetime] = mapped_column(Date, nullable=False)
+    score_level: Mapped[str] = mapped_column(String(20), nullable=False)
+    domain_id: Mapped[str | None] = mapped_column(String(36))
+    subdomain_id: Mapped[str | None] = mapped_column(String(36))
+    asset_id: Mapped[str | None] = mapped_column(String(36))
+    total_rules: Mapped[int] = mapped_column(Integer, default=0)
+    passed_rules: Mapped[int] = mapped_column(Integer, default=0)
+    failed_rules: Mapped[int] = mapped_column(Integer, default=0)
+    warning_rules: Mapped[int] = mapped_column(Integer, default=0)
+    error_rules: Mapped[int] = mapped_column(Integer, default=0)
+    quality_score: Mapped[float] = mapped_column(Float, default=100.0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class DQAlert(Base):
+    __tablename__ = "dq_alerts"
+
+    alert_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    run_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    rule_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    domain_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    subdomain_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    asset_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    severity: Mapped[str] = mapped_column(String(20), nullable=False)
+    alert_status: Mapped[str] = mapped_column(String(20), default="open", index=True)
+    alert_message: Mapped[str | None] = mapped_column(Text)
+    notified_to: Mapped[str | None] = mapped_column(String(500))
+    notification_channel: Mapped[str | None] = mapped_column(String(50))
+    notification_sent: Mapped[bool] = mapped_column(Boolean, default=False)
+    notification_sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    acknowledged_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class SnowflakeConnection(Base):
+    __tablename__ = "snowflake_connections"
+
+    connection_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    connection_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    account: Mapped[str] = mapped_column(String(300), nullable=False)
+    sf_user: Mapped[str] = mapped_column(String(200), nullable=False)
+    password: Mapped[str | None] = mapped_column(Text)
+    warehouse: Mapped[str] = mapped_column(String(200), default="DQ_EXECUTION_WH")
+    role: Mapped[str | None] = mapped_column(String(200))
+    default_database: Mapped[str | None] = mapped_column(String(200))
+    default_schema: Mapped[str | None] = mapped_column(String(200))
+    description: Mapped[str | None] = mapped_column(Text)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+
+class AppConfig(Base):
+    __tablename__ = "app_config"
+
+    config_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    category: Mapped[str] = mapped_column(String(50), nullable=False)
+    key: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    value: Mapped[str | None] = mapped_column(Text)
+    is_secret: Mapped[bool] = mapped_column(Boolean, default=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    updated_by: Mapped[str | None] = mapped_column(String(200))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+
+class ServiceAccount(Base):
+    """Machine-to-machine service accounts that authenticate via X-API-Key header."""
+    __tablename__ = "service_accounts"
+
+    sa_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    name: Mapped[str] = mapped_column(String(200), nullable=False, unique=True)
+    description: Mapped[str | None] = mapped_column(Text)
+    # First 8 chars of the generated key, stored in clear for fast lookup
+    key_prefix: Mapped[str] = mapped_column(String(8), nullable=False, index=True)
+    # bcrypt hash of the full key
+    key_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    role: Mapped[str] = mapped_column(String(30), nullable=False, default="viewer")
+    domain_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_by: Mapped[str | None] = mapped_column(String(200))
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+    __table_args__ = (
+        Index("ix_audit_logs_created_at",   "created_at"),
+        Index("ix_audit_logs_entity",       "entity_type", "entity_id"),
+        Index("ix_audit_logs_user_email",   "user_email"),
+    )
+
+    audit_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    user_email: Mapped[str | None] = mapped_column(String(200))
+    action: Mapped[str] = mapped_column(String(100), nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    entity_id: Mapped[str | None] = mapped_column(String(36))
+    old_value: Mapped[dict | None] = mapped_column(JSON)
+    new_value: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+# ---------------------------------------------------------------------------
+# §53-§68  NEW MODELS
+# ---------------------------------------------------------------------------
+
+class GlossaryTerm(Base):
+    __tablename__ = "glossary_terms"
+
+    term_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    term_name: Mapped[str] = mapped_column(String(200), unique=True, nullable=False)
+    definition: Mapped[str] = mapped_column(Text, nullable=False)
+    examples: Mapped[str | None] = mapped_column(Text)
+    synonyms: Mapped[str | None] = mapped_column(Text)
+    domain_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    owner_email: Mapped[str | None] = mapped_column(String(200))
+    status: Mapped[str] = mapped_column(String(20), default="active")
+    parent_term_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+
+class GlossaryTermAsset(Base):
+    __tablename__ = "glossary_term_assets"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    term_id: Mapped[str] = mapped_column(String(36), ForeignKey("glossary_terms.term_id"), nullable=False)
+    asset_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_assets.asset_id"), nullable=False)
+    column_name: Mapped[str | None] = mapped_column(String(200))
+    created_by: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class DataClassification(Base):
+    __tablename__ = "data_classifications"
+    __table_args__ = (
+        Index("ix_data_classifications_asset", "asset_id"),
+    )
+
+    classification_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    asset_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_assets.asset_id"), nullable=False)
+    column_name: Mapped[str | None] = mapped_column(String(200))
+    classification: Mapped[str] = mapped_column(String(30), nullable=False)
+    justification: Mapped[str | None] = mapped_column(Text)
+    applied_by: Mapped[str | None] = mapped_column(String(200))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class ColumnMetadata(Base):
+    __tablename__ = "column_metadata"
+    __table_args__ = (
+        UniqueConstraint("asset_id", "column_name", name="uq_col_meta_asset_col"),
+        Index("ix_col_meta_asset", "asset_id"),
+    )
+
+    col_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    asset_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_assets.asset_id"), nullable=False)
+    column_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    data_type: Mapped[str | None] = mapped_column(String(100))
+    is_nullable: Mapped[bool | None] = mapped_column(Boolean)
+    description: Mapped[str | None] = mapped_column(Text)
+    sample_values: Mapped[str | None] = mapped_column(Text)
+    is_primary_key: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_foreign_key: Mapped[bool] = mapped_column(Boolean, default=False)
+    references_table: Mapped[str | None] = mapped_column(String(200))
+    ordinal_position: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    null_count: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    unique_count: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    min_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    max_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    avg_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    std_dev: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cardinality_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    top_values: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_profiled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    updated_by: Mapped[str | None] = mapped_column(String(200))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+
+class DataProduct(Base):
+    __tablename__ = "data_products"
+
+    product_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    product_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    domain_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("domains.domain_id"))
+    owner_email: Mapped[str | None] = mapped_column(String(200))
+    status: Mapped[str] = mapped_column(String(20), default="draft")
+    tags: Mapped[str | None] = mapped_column(Text)
+    readme: Mapped[str | None] = mapped_column(Text)
+    version: Mapped[str] = mapped_column(String(20), default="1.0")
+    created_by: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+
+class DataProductAsset(Base):
+    __tablename__ = "data_product_assets"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    product_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_products.product_id"), nullable=False)
+    asset_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_assets.asset_id"), nullable=False)
+    role: Mapped[str | None] = mapped_column(String(50))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class AssetComment(Base):
+    __tablename__ = "asset_comments"
+    __table_args__ = (
+        Index("ix_asset_comments_entity", "entity_type", "entity_id"),
+    )
+
+    comment_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    entity_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    entity_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    parent_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    comment_type: Mapped[str] = mapped_column(String(20), default="comment")
+    is_resolved: Mapped[bool] = mapped_column(Boolean, default=False)
+    author_email: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+
+class AssetUsage(Base):
+    __tablename__ = "asset_usage"
+    __table_args__ = (
+        Index("ix_asset_usage_asset", "asset_id", "created_at"),
+    )
+
+    usage_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    asset_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_assets.asset_id"), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    user_email: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class AssetRating(Base):
+    __tablename__ = "asset_ratings"
+    __table_args__ = (
+        UniqueConstraint("asset_id", "user_email", name="uq_asset_rating_user"),
+    )
+
+    rating_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    asset_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_assets.asset_id"), nullable=False)
+    rating: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    review: Mapped[str | None] = mapped_column(Text)
+    user_email: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class AssetAnnouncement(Base):
+    __tablename__ = "asset_announcements"
+
+    announcement_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    entity_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    entity_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    body: Mapped[str | None] = mapped_column(Text)
+    announcement_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_by: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class AccessRequest(Base):
+    __tablename__ = "access_requests"
+
+    request_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    asset_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_assets.asset_id"), nullable=False)
+    requester_email: Mapped[str] = mapped_column(String(200), nullable=False)
+    requester_name: Mapped[str | None] = mapped_column(String(200))
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    access_level: Mapped[str] = mapped_column(String(20), default="read")
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    reviewer_email: Mapped[str | None] = mapped_column(String(200))
+    review_note: Mapped[str | None] = mapped_column(Text)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+
+class Tag(Base):
+    __tablename__ = "tags"
+
+    tag_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tag_name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    color: Mapped[str] = mapped_column(String(7), default="#6366f1")
+    description: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class AssetTag(Base):
+    __tablename__ = "asset_tags"
+    __table_args__ = (
+        UniqueConstraint("tag_id", "entity_type", "entity_id", name="uq_asset_tag"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tag_id: Mapped[str] = mapped_column(String(36), ForeignKey("tags.tag_id"), nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    entity_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    created_by: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class CustomAttribute(Base):
+    __tablename__ = "custom_attributes"
+    __table_args__ = (
+        UniqueConstraint("attr_key", "entity_type", "entity_id", name="uq_custom_attr"),
+    )
+
+    attr_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    attr_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    attr_value: Mapped[str | None] = mapped_column(Text)
+    entity_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    entity_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    updated_by: Mapped[str | None] = mapped_column(String(200))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+
+class AnomalyDetector(Base):
+    __tablename__ = "anomaly_detectors"
+
+    detector_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    asset_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_assets.asset_id"), nullable=False)
+    column_name: Mapped[str | None] = mapped_column(String(200))
+    detector_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    config: Mapped[dict | None] = mapped_column(JSON)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_trained_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class AnomalyDetection(Base):
+    __tablename__ = "anomaly_detections"
+    __table_args__ = (
+        Index("ix_anomaly_detections_asset", "detector_id"),
+    )
+
+    detection_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    detector_id: Mapped[str] = mapped_column(String(36), ForeignKey("anomaly_detectors.detector_id"), nullable=False)
+    asset_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    column_name: Mapped[str | None] = mapped_column(String(200))
+    anomaly_type: Mapped[str | None] = mapped_column(String(50))
+    severity: Mapped[str | None] = mapped_column(String(20))
+    observed_value: Mapped[str | None] = mapped_column(Text)
+    expected_range: Mapped[str | None] = mapped_column(Text)
+    confidence: Mapped[float | None] = mapped_column(Float)
+    detected_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    is_acknowledged: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class QualityCostConfig(Base):
+    __tablename__ = "quality_cost_configs"
+
+    config_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    asset_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("data_assets.asset_id"), nullable=True)
+    domain_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("domains.domain_id"), nullable=True)
+    cost_per_failed_row: Mapped[float | None] = mapped_column(Float)
+    cost_per_incident: Mapped[float | None] = mapped_column(Float)
+    revenue_impact_pct: Mapped[float | None] = mapped_column(Float)
+    currency: Mapped[str] = mapped_column(String(3), default="USD")
+    updated_by: Mapped[str | None] = mapped_column(String(200))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+
+class QualityIncident(Base):
+    __tablename__ = "quality_incidents"
+    __table_args__ = (
+        Index("ix_quality_incidents_asset", "asset_id"),
+    )
+
+    incident_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    title: Mapped[str | None] = mapped_column(String(200))
+    asset_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_assets.asset_id"), nullable=False)
+    severity: Mapped[str | None] = mapped_column(String(20))
+    status: Mapped[str] = mapped_column(String(20), default="open")
+    trigger_run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    alert_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    rca_report: Mapped[dict | None] = mapped_column(JSON)
+    timeline: Mapped[dict | None] = mapped_column(JSON)
+    resolved_by: Mapped[str | None] = mapped_column(String(200))
+    ttd_minutes: Mapped[int | None] = mapped_column(Integer)
+    ttr_minutes: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class ComplianceFramework(Base):
+    __tablename__ = "compliance_frameworks"
+
+    framework_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    framework_name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    version: Mapped[str | None] = mapped_column(String(20))
+    description: Mapped[str | None] = mapped_column(Text)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class ComplianceRequirement(Base):
+    __tablename__ = "compliance_requirements"
+
+    req_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    framework_id: Mapped[str] = mapped_column(String(36), ForeignKey("compliance_frameworks.framework_id"), nullable=False)
+    req_code: Mapped[str | None] = mapped_column(String(50))
+    req_name: Mapped[str | None] = mapped_column(String(200))
+    req_description: Mapped[str | None] = mapped_column(Text)
+    dq_rule_types: Mapped[str | None] = mapped_column(Text)
+
+
+class ComplianceMapping(Base):
+    __tablename__ = "compliance_mappings"
+
+    mapping_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    asset_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_assets.asset_id"), nullable=False)
+    framework_id: Mapped[str] = mapped_column(String(36), ForeignKey("compliance_frameworks.framework_id"), nullable=False)
+    req_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("compliance_requirements.req_id"), nullable=True)
+    rule_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("dq_rules.rule_id"), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="mapped")
+    evidence_note: Mapped[str | None] = mapped_column(Text)
+    mapped_by: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class GovernancePolicy(Base):
+    __tablename__ = "governance_policies"
+
+    policy_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    policy_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    policy_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    severity: Mapped[str] = mapped_column(String(20), default="medium")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    config: Mapped[dict | None] = mapped_column(JSON)
+    created_by: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class PolicyViolation(Base):
+    __tablename__ = "policy_violations"
+    __table_args__ = (
+        Index("ix_policy_violations_entity", "entity_type", "entity_id"),
+    )
+
+    violation_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    policy_id: Mapped[str] = mapped_column(String(36), ForeignKey("governance_policies.policy_id"), nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    entity_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    violation_detail: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(20), default="open")
+    detected_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class DataContract(Base):
+    __tablename__ = "data_contracts"
+
+    contract_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    asset_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_assets.asset_id"), nullable=False)
+    contract_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    version: Mapped[str] = mapped_column(String(20), default="1.0")
+    producer_team: Mapped[str | None] = mapped_column(String(200))
+    consumer_team: Mapped[str | None] = mapped_column(String(200))
+    status: Mapped[str] = mapped_column(String(20), default="draft")
+    schema_json: Mapped[dict | None] = mapped_column(JSON)
+    min_quality_score: Mapped[float] = mapped_column(Float, default=95.0)
+    max_null_pct: Mapped[float | None] = mapped_column(Float)
+    max_staleness_hours: Mapped[int] = mapped_column(Integer, default=24)
+    sla_description: Mapped[str | None] = mapped_column(Text)
+    breach_action: Mapped[str | None] = mapped_column(String(50))
+    effective_from: Mapped[datetime | None] = mapped_column(Date, nullable=True)
+    effective_until: Mapped[datetime | None] = mapped_column(Date, nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+
+class RuleTemplate(Base):
+    __tablename__ = "rule_templates"
+
+    template_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    template_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    rule_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    default_config: Mapped[dict | None] = mapped_column(JSON)
+    target_domains: Mapped[str | None] = mapped_column(Text)
+    target_industries: Mapped[str | None] = mapped_column(Text)
+    tags: Mapped[str | None] = mapped_column(Text)
+    author_email: Mapped[str | None] = mapped_column(String(200))
+    is_public: Mapped[bool] = mapped_column(Boolean, default=False)
+    downloads: Mapped[int] = mapped_column(Integer, default=0)
+    rating: Mapped[float] = mapped_column(Float, default=0.0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class OncallSchedule(Base):
+    __tablename__ = "oncall_schedules"
+
+    schedule_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    domain_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("domains.domain_id"), nullable=True)
+    oncall_email: Mapped[str] = mapped_column(String(200), nullable=False)
+    oncall_slack: Mapped[str | None] = mapped_column(String(200))
+    pagerduty_key: Mapped[str | None] = mapped_column(String(200))
+    effective_from: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    effective_until: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    timezone: Mapped[str] = mapped_column(String(50), default="UTC")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class IncidentRunbook(Base):
+    __tablename__ = "incident_runbooks"
+
+    runbook_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    rule_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("dq_rules.rule_id"), nullable=True)
+    title: Mapped[str | None] = mapped_column(String(200))
+    steps: Mapped[str] = mapped_column(Text, nullable=False)
+    escalation_path: Mapped[str | None] = mapped_column(Text)
+    related_dashboards: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[str | None] = mapped_column(String(200))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+
+class DataLineage(Base):
+    __tablename__ = "data_lineage"
+    __table_args__ = (
+        Index("ix_lineage_upstream", "upstream_asset_id"),
+        Index("ix_lineage_downstream", "downstream_asset_id"),
+    )
+
+    lineage_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    upstream_asset_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("data_assets.asset_id"), nullable=True)
+    downstream_asset_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("data_assets.asset_id"), nullable=True)
+    lineage_type: Mapped[str | None] = mapped_column(String(30))
+    downstream_name: Mapped[str | None] = mapped_column(String(200))
+    downstream_type: Mapped[str | None] = mapped_column(String(50))
+    transformation_sql: Mapped[str | None] = mapped_column(Text)
+    description: Mapped[str | None] = mapped_column(Text)
+    owner_email: Mapped[str | None] = mapped_column(String(200))
+    is_critical: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_by: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+
+class DataSharingAgreement(Base):
+    __tablename__ = "data_sharing_agreements"
+
+    agreement_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    producer_domain_id: Mapped[str] = mapped_column(String(36), ForeignKey("domains.domain_id"), nullable=False)
+    consumer_domain_id: Mapped[str] = mapped_column(String(36), ForeignKey("domains.domain_id"), nullable=False)
+    asset_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_assets.asset_id"), nullable=False)
+    quality_sla: Mapped[float] = mapped_column(Float, nullable=False)
+    freshness_sla: Mapped[int] = mapped_column(Integer, nullable=False)
+    breach_action: Mapped[str | None] = mapped_column(String(30))
+    effective_from: Mapped[datetime | None] = mapped_column(Date, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="active")
+    signed_by_producer: Mapped[str | None] = mapped_column(String(200))
+    signed_by_consumer: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class MaskingPolicy(Base):
+    __tablename__ = "masking_policies"
+    __table_args__ = (
+        UniqueConstraint("asset_id", "column_name", name="uq_masking_policy_col"),
+    )
+
+    policy_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    asset_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_assets.asset_id"), nullable=False)
+    column_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    masking_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    applies_to_roles: Mapped[str | None] = mapped_column(Text)
+    unmasked_roles: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
