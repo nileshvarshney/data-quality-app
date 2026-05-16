@@ -332,7 +332,7 @@ async def trigger_rca(
 ):
     """Trigger Root Cause Analysis for a failed run (§55.3)."""
     from sqlalchemy import select, desc
-    from app.db.models import DQRuleRun, DQRule, DataAsset, DataLineage
+    from app.db.models import DQRuleRun, DQRule, DataAsset
     from app.services.llm_providers import get_provider_from_db
 
     run_res = await db.execute(select(DQRuleRun).where(DQRuleRun.run_id == run_id))
@@ -346,11 +346,8 @@ async def trigger_rca(
     asset_res = await db.execute(select(DataAsset).where(DataAsset.asset_id == run.asset_id))
     asset = asset_res.scalar_one_or_none()
 
-    # Check upstream lineage for quality degradation
-    upstream_res = await db.execute(
-        select(DataLineage).where(DataLineage.downstream_asset_id == run.asset_id)
-    )
-    upstream_links = upstream_res.scalars().all()
+    # lineage context removed - now uses data_object_relationships (object_id-based)
+    upstream_links = []
 
     # Build context for LLM
     context = (

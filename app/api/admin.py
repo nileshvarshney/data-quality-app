@@ -19,7 +19,7 @@ from app.db.models import (
     AssetComment, AssetUsage, AssetRating, AssetTag,
     CustomAttribute, AnomalyDetector, AnomalyDetection,
     QualityCostConfig, QualityIncident, ComplianceMapping,
-    DataContract, DataLineage, DataSharingAgreement,
+    DataContract, DataSharingAgreement,
     MaskingPolicy, DataProductAsset, AccessRequest,
     AssetAnnouncement, PolicyViolation,
 )
@@ -83,8 +83,7 @@ async def _delete_domain_data(domain_id: str, db: AsyncSession) -> dict:
         counts["quality_incidents"]    = await _del(QualityIncident,   QualityIncident.asset_id.in_(asset_ids))
         counts["compliance_mappings"]  = await _del(ComplianceMapping, ComplianceMapping.asset_id.in_(asset_ids))
         counts["data_contracts"]       = await _del(DataContract,  DataContract.asset_id.in_(asset_ids))
-        counts["data_lineage_up"]      = await _del(DataLineage,   DataLineage.upstream_asset_id.in_(asset_ids))
-        counts["data_lineage_down"]    = await _del(DataLineage,   DataLineage.downstream_asset_id.in_(asset_ids))
+        # data_object_relationships cleaned via ON DELETE CASCADE on data_objects
         counts["masking_policies"]     = await _del(MaskingPolicy,  MaskingPolicy.asset_id.in_(asset_ids))
         counts["data_product_assets"]  = await _del(DataProductAsset, DataProductAsset.asset_id.in_(asset_ids))
         counts["access_requests"]      = await _del(AccessRequest,  AccessRequest.asset_id.in_(asset_ids))

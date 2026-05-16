@@ -1,4 +1,3 @@
-import enum
 import uuid
 from datetime import datetime, timezone, date
 from sqlalchemy import (
@@ -834,7 +833,7 @@ class DataObject(Base):
     quality_score: Mapped[float | None] = mapped_column(Float)
     status: Mapped[str | None] = mapped_column(String(50))
     certification_status: Mapped[str | None] = mapped_column(String(50))
-    tags: Mapped[dict | None] = mapped_column(JSON)
+    tags: Mapped[list | None] = mapped_column(JSON)
     last_refreshed_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
@@ -848,8 +847,8 @@ class DataObjectRelationship(Base):
     )
 
     relationship_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
-    source_object_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_objects.object_id"), nullable=False)
-    target_object_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_objects.object_id"), nullable=False)
+    source_object_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_objects.object_id", ondelete="CASCADE"), nullable=False)
+    target_object_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_objects.object_id", ondelete="CASCADE"), nullable=False)
     relationship_type: Mapped[str] = mapped_column(String(30), nullable=False)  # READS_FROM | TRANSFORMS | JOINS_WITH | AGGREGATES_FROM | FILTERS_FROM | DERIVED_FROM
     transformation_logic: Mapped[str | None] = mapped_column(Text)
     confidence_score: Mapped[float | None] = mapped_column(Float)
@@ -864,7 +863,7 @@ class DataObjectColumn(Base):
     )
 
     column_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
-    object_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_objects.object_id"), nullable=False)
+    object_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_objects.object_id", ondelete="CASCADE"), nullable=False)
     column_name: Mapped[str] = mapped_column(String(200), nullable=False)
     data_type: Mapped[str | None] = mapped_column(String(100))
     ordinal_position: Mapped[int | None] = mapped_column(Integer)

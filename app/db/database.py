@@ -496,131 +496,131 @@ async def create_tables():
 
 async def seed_lineage_data():
     """Insert sample lineage objects idempotently. Safe to call on every startup."""
-    import uuid
-    from datetime import datetime, timezone
-    from sqlalchemy import text
+    try:
+        from sqlalchemy import text
 
-    async with AsyncSessionLocal() as session:
-        # Check if already seeded
-        result = await session.execute(text("SELECT COUNT(*) FROM data_objects"))
-        if result.scalar() > 0:
-            return
+        async with AsyncSessionLocal() as session:
+            # Check if already seeded
+            result = await session.execute(text("SELECT COUNT(*) FROM data_objects"))
+            if result.scalar() > 0:
+                return
 
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
+            # 10 sample objects
+            objects = [
+                # HR lineage chain
+                {"object_id": "obj-emp-001", "object_name": "emp", "object_type": "TABLE",
+                 "database_name": "PROD_DB", "schema_name": "HR_SCHEMA", "domain": "HR",
+                 "sub_domain": "Workforce", "owner": "hr@acme.com", "quality_score": 92.0,
+                 "status": "active", "certification_status": "certified", "tags": ["hr", "employees"]},
+                {"object_id": "obj-dept-001", "object_name": "dept", "object_type": "TABLE",
+                 "database_name": "PROD_DB", "schema_name": "HR_SCHEMA", "domain": "HR",
+                 "sub_domain": "Workforce", "owner": "hr@acme.com", "quality_score": 88.0,
+                 "status": "active", "certification_status": "certified", "tags": ["hr", "departments"]},
+                {"object_id": "obj-salary-001", "object_name": "salary", "object_type": "TABLE",
+                 "database_name": "PROD_DB", "schema_name": "HR_SCHEMA", "domain": "HR",
+                 "sub_domain": "Compensation", "owner": "hr@acme.com", "quality_score": 95.0,
+                 "status": "active", "certification_status": "certified", "tags": ["hr", "payroll"]},
+                {"object_id": "obj-emptview-001", "object_name": "emp_dept_v", "object_type": "VIEW",
+                 "database_name": "PROD_DB", "schema_name": "HR_SCHEMA", "domain": "HR",
+                 "sub_domain": "Workforce", "owner": "hr@acme.com", "quality_score": 74.0,
+                 "status": "active", "certification_status": "certified", "tags": ["hr", "payroll"]},
+                {"object_id": "obj-empdsal-001", "object_name": "emp_dept_sal_v", "object_type": "VIEW",
+                 "database_name": "PROD_DB", "schema_name": "HR_SCHEMA", "domain": "HR",
+                 "sub_domain": "Compensation", "owner": "hr@acme.com", "quality_score": 81.0,
+                 "status": "active", "certification_status": None, "tags": ["hr", "payroll"]},
+                {"object_id": "obj-empsum-001", "object_name": "emp_summary_mv", "object_type": "MATERIALIZED_VIEW",
+                 "database_name": "PROD_DB", "schema_name": "HR_SCHEMA", "domain": "HR",
+                 "sub_domain": "Analytics", "owner": "analytics@acme.com", "quality_score": 78.0,
+                 "status": "active", "certification_status": None, "tags": ["hr", "analytics"]},
+                {"object_id": "obj-highear-001", "object_name": "high_earners_v", "object_type": "VIEW",
+                 "database_name": "PROD_DB", "schema_name": "HR_SCHEMA", "domain": "HR",
+                 "sub_domain": "Analytics", "owner": "analytics@acme.com", "quality_score": 85.0,
+                 "status": "active", "certification_status": None, "tags": ["hr"]},
+                # Sales lineage chain
+                {"object_id": "obj-products-001", "object_name": "products", "object_type": "TABLE",
+                 "database_name": "PROD_DB", "schema_name": "SALES_SCHEMA", "domain": "Sales",
+                 "sub_domain": "Catalog", "owner": "sales@acme.com", "quality_score": 90.0,
+                 "status": "active", "certification_status": "certified", "tags": ["sales", "products"]},
+                {"object_id": "obj-orders-001", "object_name": "orders", "object_type": "TABLE",
+                 "database_name": "PROD_DB", "schema_name": "SALES_SCHEMA", "domain": "Sales",
+                 "sub_domain": "Transactions", "owner": "sales@acme.com", "quality_score": 87.0,
+                 "status": "active", "certification_status": "certified", "tags": ["sales", "orders"]},
+                {"object_id": "obj-prodsales-001", "object_name": "product_sales_v", "object_type": "VIEW",
+                 "database_name": "PROD_DB", "schema_name": "SALES_SCHEMA", "domain": "Sales",
+                 "sub_domain": "Analytics", "owner": "sales@acme.com", "quality_score": 83.0,
+                 "status": "active", "certification_status": None, "tags": ["sales"]},
+                {"object_id": "obj-revdaily-001", "object_name": "revenue_daily_mv", "object_type": "MATERIALIZED_VIEW",
+                 "database_name": "PROD_DB", "schema_name": "SALES_SCHEMA", "domain": "Sales",
+                 "sub_domain": "Analytics", "owner": "analytics@acme.com", "quality_score": 91.0,
+                 "status": "active", "certification_status": "certified", "tags": ["sales", "revenue"]},
+            ]
 
-        # 10 sample objects
-        objects = [
-            # HR lineage chain
-            {"object_id": "obj-emp-001", "object_name": "emp", "object_type": "TABLE",
-             "database_name": "PROD_DB", "schema_name": "HR_SCHEMA", "domain": "HR",
-             "sub_domain": "Workforce", "owner": "hr@acme.com", "quality_score": 92.0,
-             "status": "active", "certification_status": "certified", "tags": ["hr", "employees"]},
-            {"object_id": "obj-dept-001", "object_name": "dept", "object_type": "TABLE",
-             "database_name": "PROD_DB", "schema_name": "HR_SCHEMA", "domain": "HR",
-             "sub_domain": "Workforce", "owner": "hr@acme.com", "quality_score": 88.0,
-             "status": "active", "certification_status": "certified", "tags": ["hr", "departments"]},
-            {"object_id": "obj-salary-001", "object_name": "salary", "object_type": "TABLE",
-             "database_name": "PROD_DB", "schema_name": "HR_SCHEMA", "domain": "HR",
-             "sub_domain": "Compensation", "owner": "hr@acme.com", "quality_score": 95.0,
-             "status": "active", "certification_status": "certified", "tags": ["hr", "payroll"]},
-            {"object_id": "obj-emptview-001", "object_name": "emp_dept_v", "object_type": "VIEW",
-             "database_name": "PROD_DB", "schema_name": "HR_SCHEMA", "domain": "HR",
-             "sub_domain": "Workforce", "owner": "hr@acme.com", "quality_score": 74.0,
-             "status": "active", "certification_status": "certified", "tags": ["hr", "payroll"]},
-            {"object_id": "obj-empdsal-001", "object_name": "emp_dept_sal_v", "object_type": "VIEW",
-             "database_name": "PROD_DB", "schema_name": "HR_SCHEMA", "domain": "HR",
-             "sub_domain": "Compensation", "owner": "hr@acme.com", "quality_score": 81.0,
-             "status": "active", "certification_status": None, "tags": ["hr", "payroll"]},
-            {"object_id": "obj-empsum-001", "object_name": "emp_summary_mv", "object_type": "MATERIALIZED_VIEW",
-             "database_name": "PROD_DB", "schema_name": "HR_SCHEMA", "domain": "HR",
-             "sub_domain": "Analytics", "owner": "analytics@acme.com", "quality_score": 78.0,
-             "status": "active", "certification_status": None, "tags": ["hr", "analytics"]},
-            {"object_id": "obj-highear-001", "object_name": "high_earners_v", "object_type": "VIEW",
-             "database_name": "PROD_DB", "schema_name": "HR_SCHEMA", "domain": "HR",
-             "sub_domain": "Analytics", "owner": "analytics@acme.com", "quality_score": 85.0,
-             "status": "active", "certification_status": None, "tags": ["hr"]},
-            # Sales lineage chain
-            {"object_id": "obj-products-001", "object_name": "products", "object_type": "TABLE",
-             "database_name": "PROD_DB", "schema_name": "SALES_SCHEMA", "domain": "Sales",
-             "sub_domain": "Catalog", "owner": "sales@acme.com", "quality_score": 90.0,
-             "status": "active", "certification_status": "certified", "tags": ["sales", "products"]},
-            {"object_id": "obj-orders-001", "object_name": "orders", "object_type": "TABLE",
-             "database_name": "PROD_DB", "schema_name": "SALES_SCHEMA", "domain": "Sales",
-             "sub_domain": "Transactions", "owner": "sales@acme.com", "quality_score": 87.0,
-             "status": "active", "certification_status": "certified", "tags": ["sales", "orders"]},
-            {"object_id": "obj-prodsales-001", "object_name": "product_sales_v", "object_type": "VIEW",
-             "database_name": "PROD_DB", "schema_name": "SALES_SCHEMA", "domain": "Sales",
-             "sub_domain": "Analytics", "owner": "sales@acme.com", "quality_score": 83.0,
-             "status": "active", "certification_status": None, "tags": ["sales"]},
-            {"object_id": "obj-revdaily-001", "object_name": "revenue_daily_mv", "object_type": "MATERIALIZED_VIEW",
-             "database_name": "PROD_DB", "schema_name": "SALES_SCHEMA", "domain": "Sales",
-             "sub_domain": "Analytics", "owner": "analytics@acme.com", "quality_score": 91.0,
-             "status": "active", "certification_status": "certified", "tags": ["sales", "revenue"]},
-        ]
+            for obj in objects:
+                tags = obj.pop("tags")
+                await session.execute(text("""
+                    INSERT INTO data_objects
+                    (object_id, object_name, object_type, database_name, schema_name, domain, sub_domain,
+                     owner, quality_score, status, certification_status, tags, created_at, updated_at)
+                    VALUES (:object_id, :object_name, :object_type, :database_name, :schema_name,
+                            :domain, :sub_domain, :owner, :quality_score, :status, :certification_status,
+                            :tags::jsonb, NOW(), NOW())
+                    ON CONFLICT (object_id) DO NOTHING
+                """), {**obj, "tags": str(tags).replace("'", '"')})
 
-        for obj in objects:
-            tags = obj.pop("tags")
-            await session.execute(text("""
-                INSERT INTO data_objects
-                (object_id, object_name, object_type, database_name, schema_name, domain, sub_domain,
-                 owner, quality_score, status, certification_status, tags, created_at, updated_at)
-                VALUES (:object_id, :object_name, :object_type, :database_name, :schema_name,
-                        :domain, :sub_domain, :owner, :quality_score, :status, :certification_status,
-                        :tags::jsonb, NOW(), NOW())
-                ON CONFLICT (object_id) DO NOTHING
-            """), {**obj, "tags": str(tags).replace("'", '"')})
+            # Relationships
+            relationships = [
+                # HR chain: emp + dept → emp_dept_v (JOINS_WITH)
+                {"relationship_id": "rel-001", "source_object_id": "obj-emp-001", "target_object_id": "obj-emptview-001", "relationship_type": "JOINS_WITH", "confidence_score": 1.0},
+                {"relationship_id": "rel-002", "source_object_id": "obj-dept-001", "target_object_id": "obj-emptview-001", "relationship_type": "JOINS_WITH", "confidence_score": 1.0},
+                # emp_dept_v + salary → emp_dept_sal_v (READS_FROM)
+                {"relationship_id": "rel-003", "source_object_id": "obj-emptview-001", "target_object_id": "obj-empdsal-001", "relationship_type": "READS_FROM", "confidence_score": 1.0},
+                {"relationship_id": "rel-004", "source_object_id": "obj-salary-001", "target_object_id": "obj-empdsal-001", "relationship_type": "READS_FROM", "confidence_score": 1.0},
+                # emp_dept_sal_v → emp_summary_mv (AGGREGATES_FROM)
+                {"relationship_id": "rel-005", "source_object_id": "obj-empdsal-001", "target_object_id": "obj-empsum-001", "relationship_type": "AGGREGATES_FROM", "confidence_score": 1.0},
+                # emp_summary_mv → high_earners_v (DERIVED_FROM)
+                {"relationship_id": "rel-006", "source_object_id": "obj-empsum-001", "target_object_id": "obj-highear-001", "relationship_type": "DERIVED_FROM", "confidence_score": 0.95},
+                # Sales chain: products + orders → product_sales_v (READS_FROM)
+                {"relationship_id": "rel-007", "source_object_id": "obj-products-001", "target_object_id": "obj-prodsales-001", "relationship_type": "READS_FROM", "confidence_score": 1.0},
+                {"relationship_id": "rel-008", "source_object_id": "obj-orders-001", "target_object_id": "obj-prodsales-001", "relationship_type": "READS_FROM", "confidence_score": 1.0},
+                # product_sales_v → revenue_daily_mv (TRANSFORMS)
+                {"relationship_id": "rel-009", "source_object_id": "obj-prodsales-001", "target_object_id": "obj-revdaily-001", "relationship_type": "TRANSFORMS", "confidence_score": 1.0},
+            ]
 
-        # Relationships
-        relationships = [
-            # HR chain: emp + dept → emp_dept_v (JOINS_WITH)
-            {"relationship_id": "rel-001", "source_object_id": "obj-emp-001", "target_object_id": "obj-emptview-001", "relationship_type": "JOINS_WITH", "confidence_score": 1.0},
-            {"relationship_id": "rel-002", "source_object_id": "obj-dept-001", "target_object_id": "obj-emptview-001", "relationship_type": "JOINS_WITH", "confidence_score": 1.0},
-            # emp_dept_v + salary → emp_dept_sal_v (READS_FROM)
-            {"relationship_id": "rel-003", "source_object_id": "obj-emptview-001", "target_object_id": "obj-empdsal-001", "relationship_type": "READS_FROM", "confidence_score": 1.0},
-            {"relationship_id": "rel-004", "source_object_id": "obj-salary-001", "target_object_id": "obj-empdsal-001", "relationship_type": "READS_FROM", "confidence_score": 1.0},
-            # emp_dept_sal_v → emp_summary_mv (AGGREGATES_FROM)
-            {"relationship_id": "rel-005", "source_object_id": "obj-empdsal-001", "target_object_id": "obj-empsum-001", "relationship_type": "AGGREGATES_FROM", "confidence_score": 1.0},
-            # emp_summary_mv → high_earners_v (DERIVED_FROM)
-            {"relationship_id": "rel-006", "source_object_id": "obj-empsum-001", "target_object_id": "obj-highear-001", "relationship_type": "DERIVED_FROM", "confidence_score": 0.95},
-            # Sales chain: products + orders → product_sales_v (READS_FROM)
-            {"relationship_id": "rel-007", "source_object_id": "obj-products-001", "target_object_id": "obj-prodsales-001", "relationship_type": "READS_FROM", "confidence_score": 1.0},
-            {"relationship_id": "rel-008", "source_object_id": "obj-orders-001", "target_object_id": "obj-prodsales-001", "relationship_type": "READS_FROM", "confidence_score": 1.0},
-            # product_sales_v → revenue_daily_mv (TRANSFORMS)
-            {"relationship_id": "rel-009", "source_object_id": "obj-prodsales-001", "target_object_id": "obj-revdaily-001", "relationship_type": "TRANSFORMS", "confidence_score": 1.0},
-        ]
+            for rel in relationships:
+                await session.execute(text("""
+                    INSERT INTO data_object_relationships
+                    (relationship_id, source_object_id, target_object_id, relationship_type, confidence_score, created_at, updated_at)
+                    VALUES (:relationship_id, :source_object_id, :target_object_id, :relationship_type, :confidence_score, NOW(), NOW())
+                    ON CONFLICT (relationship_id) DO NOTHING
+                """), rel)
 
-        for rel in relationships:
-            await session.execute(text("""
-                INSERT INTO data_object_relationships
-                (relationship_id, source_object_id, target_object_id, relationship_type, confidence_score, created_at, updated_at)
-                VALUES (:relationship_id, :source_object_id, :target_object_id, :relationship_type, :confidence_score, NOW(), NOW())
-                ON CONFLICT (relationship_id) DO NOTHING
-            """), rel)
+            # Sample columns for emp_dept_v
+            columns = [
+                {"column_id": "col-001", "object_id": "obj-emptview-001", "column_name": "emp_id", "data_type": "INTEGER", "ordinal_position": 1, "is_nullable": False},
+                {"column_id": "col-002", "object_id": "obj-emptview-001", "column_name": "emp_name", "data_type": "VARCHAR", "ordinal_position": 2, "is_nullable": False},
+                {"column_id": "col-003", "object_id": "obj-emptview-001", "column_name": "dept_id", "data_type": "INTEGER", "ordinal_position": 3, "is_nullable": True},
+                {"column_id": "col-004", "object_id": "obj-emptview-001", "column_name": "dept_name", "data_type": "VARCHAR", "ordinal_position": 4, "is_nullable": True},
+                {"column_id": "col-005", "object_id": "obj-emptview-001", "column_name": "hire_date", "data_type": "DATE", "ordinal_position": 5, "is_nullable": True},
+                # emp table columns
+                {"column_id": "col-010", "object_id": "obj-emp-001", "column_name": "emp_id", "data_type": "INTEGER", "ordinal_position": 1, "is_nullable": False},
+                {"column_id": "col-011", "object_id": "obj-emp-001", "column_name": "emp_name", "data_type": "VARCHAR", "ordinal_position": 2, "is_nullable": False},
+                {"column_id": "col-012", "object_id": "obj-emp-001", "column_name": "dept_id", "data_type": "INTEGER", "ordinal_position": 3, "is_nullable": True},
+                {"column_id": "col-013", "object_id": "obj-emp-001", "column_name": "hire_date", "data_type": "DATE", "ordinal_position": 4, "is_nullable": True},
+                # salary table columns
+                {"column_id": "col-020", "object_id": "obj-salary-001", "column_name": "emp_id", "data_type": "INTEGER", "ordinal_position": 1, "is_nullable": False},
+                {"column_id": "col-021", "object_id": "obj-salary-001", "column_name": "salary_amount", "data_type": "NUMERIC", "ordinal_position": 2, "is_nullable": False},
+                {"column_id": "col-022", "object_id": "obj-salary-001", "column_name": "effective_date", "data_type": "DATE", "ordinal_position": 3, "is_nullable": False},
+            ]
 
-        # Sample columns for emp_dept_v
-        columns = [
-            {"column_id": "col-001", "object_id": "obj-emptview-001", "column_name": "emp_id", "data_type": "INTEGER", "ordinal_position": 1, "is_nullable": False},
-            {"column_id": "col-002", "object_id": "obj-emptview-001", "column_name": "emp_name", "data_type": "VARCHAR", "ordinal_position": 2, "is_nullable": False},
-            {"column_id": "col-003", "object_id": "obj-emptview-001", "column_name": "dept_id", "data_type": "INTEGER", "ordinal_position": 3, "is_nullable": True},
-            {"column_id": "col-004", "object_id": "obj-emptview-001", "column_name": "dept_name", "data_type": "VARCHAR", "ordinal_position": 4, "is_nullable": True},
-            {"column_id": "col-005", "object_id": "obj-emptview-001", "column_name": "hire_date", "data_type": "DATE", "ordinal_position": 5, "is_nullable": True},
-            # emp table columns
-            {"column_id": "col-010", "object_id": "obj-emp-001", "column_name": "emp_id", "data_type": "INTEGER", "ordinal_position": 1, "is_nullable": False},
-            {"column_id": "col-011", "object_id": "obj-emp-001", "column_name": "emp_name", "data_type": "VARCHAR", "ordinal_position": 2, "is_nullable": False},
-            {"column_id": "col-012", "object_id": "obj-emp-001", "column_name": "dept_id", "data_type": "INTEGER", "ordinal_position": 3, "is_nullable": True},
-            {"column_id": "col-013", "object_id": "obj-emp-001", "column_name": "hire_date", "data_type": "DATE", "ordinal_position": 4, "is_nullable": True},
-            # salary table columns
-            {"column_id": "col-020", "object_id": "obj-salary-001", "column_name": "emp_id", "data_type": "INTEGER", "ordinal_position": 1, "is_nullable": False},
-            {"column_id": "col-021", "object_id": "obj-salary-001", "column_name": "salary_amount", "data_type": "NUMERIC", "ordinal_position": 2, "is_nullable": False},
-            {"column_id": "col-022", "object_id": "obj-salary-001", "column_name": "effective_date", "data_type": "DATE", "ordinal_position": 3, "is_nullable": False},
-        ]
+            for col in columns:
+                await session.execute(text("""
+                    INSERT INTO data_object_columns
+                    (column_id, object_id, column_name, data_type, ordinal_position, is_nullable, created_at, updated_at)
+                    VALUES (:column_id, :object_id, :column_name, :data_type, :ordinal_position, :is_nullable, NOW(), NOW())
+                    ON CONFLICT (column_id) DO NOTHING
+                """), col)
 
-        for col in columns:
-            await session.execute(text("""
-                INSERT INTO data_object_columns
-                (column_id, object_id, column_name, data_type, ordinal_position, is_nullable, created_at, updated_at)
-                VALUES (:column_id, :object_id, :column_name, :data_type, :ordinal_position, :is_nullable, NOW(), NOW())
-                ON CONFLICT (column_id) DO NOTHING
-            """), col)
-
-        await session.commit()
+            await session.commit()
+    except Exception as e:
+        import logging
+        logging.getLogger("dq_platform").warning(f"seed_lineage_data skipped: {e}")

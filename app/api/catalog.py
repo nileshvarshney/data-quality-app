@@ -13,7 +13,7 @@ from app.db.database import get_db
 from app.db.models import (
     DataAsset, GlossaryTerm, DataProduct, AssetUsage,
     DQQualityScore, DataClassification, GlossaryTermAsset,
-    Domain, DataLineage, AssetTag, Tag,
+    Domain, AssetTag, Tag,
 )
 from app.core.security import get_current_user, require_admin
 from app.services.catalog_service import refresh_search_index, enrich_asset_results
@@ -335,12 +335,9 @@ async def catalog_asset_detail(
     enrichment = await enrich_asset_results([asset_id], db)
     enrich = enrichment.get(asset_id, {})
 
-    upstream_count = (await db.execute(
-        select(func.count()).where(DataLineage.downstream_asset_id == asset_id)
-    )).scalar() or 0
-    downstream_count = (await db.execute(
-        select(func.count()).where(DataLineage.upstream_asset_id == asset_id)
-    )).scalar() or 0
+    # lineage counts removed - now uses data_object_relationships (object_id-based)
+    upstream_count = 0
+    downstream_count = 0
 
     return {
         "asset_id": asset.asset_id,
