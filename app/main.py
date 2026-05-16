@@ -79,6 +79,8 @@ async def lifespan(app: FastAPI):
         from app.services.config_service import seed_config
         async with AsyncSessionLocal() as db:
             await seed_config(db)
+        from app.db.database import seed_lineage_data
+        await seed_lineage_data()
         start_scheduler()
         from app.services.scheduler_service import load_all_schedules
         async with AsyncSessionLocal() as db:
