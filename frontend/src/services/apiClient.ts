@@ -280,9 +280,17 @@ export const glossaryApi = {
 // Catalog
 export const catalogApi = {
   search: (params: object) => api.get('/catalog/search', { params }),
+  facets: (params?: object) => api.get('/catalog/facets', { params }),
   popular: () => api.get('/catalog/popular'),
   recent: () => api.get('/catalog/recent'),
   domainAssets: (domainId: string) => api.get(`/catalog/domains/${domainId}/assets`),
+  assetDetail: (assetId: string) => api.get(`/catalog/assets/${assetId}`),
+  savedSearches: {
+    list: () => api.get('/catalog/saved-searches'),
+    save: (payload: { name: string; query?: string; filters?: object }) =>
+      api.post('/catalog/saved-searches', payload),
+    delete: (searchId: string) => api.delete(`/catalog/saved-searches/${searchId}`),
+  },
 }
 
 // Data Products
