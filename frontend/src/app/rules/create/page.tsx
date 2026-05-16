@@ -252,7 +252,7 @@ export default function CreateRulePage() {
   // Core form
   const [form, setForm] = useState({
     domain_id: '', subdomain_id: '', asset_id: '',
-    rule_type: 'null_check', severity: 'medium', status: 'active',
+    rule_type: 'null_check', severity: 'medium', status: 'draft',
     rule_name: '', rule_description: '', rule_sql: '',
   })
 
@@ -899,6 +899,9 @@ export default function CreateRulePage() {
           className="w-full py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors">
           {saving ? 'Creating Rule…' : 'Create Rule'}
         </button>
+        <p className="text-xs text-center text-gray-500 mt-2">
+          Rules are saved as drafts. Use &quot;Submit for Review&quot; on the rule detail page to begin the approval process.
+        </p>
       </form>
     </div>
   )

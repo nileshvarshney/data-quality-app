@@ -417,6 +417,36 @@ async def reject_rule(
     return rule
 
 
+@router.post("/{rule_id}/submit", response_model=RuleResponse)
+async def submit_rule_for_review(
+    rule_id: str,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Move a draft rule to pending_review for governance approval."""
+    result = await db.execute(select(DQRule).where(DQRule.rule_id == rule_id))
+    rule = result.scalar_one_or_none()
+    if not rule:
+        raise HTTPException(404, "Rule not found")
+    if rule.status != "draft":
+        raise HTTPException(400, f"Only draft rules can be submitted for review. Current status: {rule.status}")
+    await _snapshot_rule_version(db, rule, changed_by=user.get("email"), change_reason="submitted for review")
+    rule.status = "pending_review"
+    rule.version = (rule.version or 1) + 1
+    rule.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    db.add(AuditLog(
+        audit_id=str(uuid.uuid4()),
+        user_email=user.get("email"),
+        action="SUBMIT_FOR_REVIEW",
+        entity_type="rule",
+        entity_id=rule_id,
+        new_value={"status": "pending_review", "submitted_by": user.get("email")},
+    ))
+    await db.commit()
+    await db.refresh(rule)
+    return rule
+
+
 # ── Version History ───────────────────────────────────────────────────────────
 
 @router.get("/{rule_id}/versions", response_model=list[RuleVersionResponse])

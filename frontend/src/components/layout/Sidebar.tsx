@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useMemo, memo } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
-  Globe, Database, Shield, Calendar, Bell, ClipboardList,
+  Globe, Database, Shield, Calendar, Bell, ClipboardList, ClipboardCheck,
   PlayCircle, Settings, FolderKanban, LogOut, User, Sun, Moon,
   BrainCircuit, HelpCircle, Search, BookOpen, Package, FileText, Sparkles,
   AlertOctagon, ShoppingBag, BarChart2, ChevronDown, ChevronRight,
@@ -50,8 +50,9 @@ const NAV: NavSection[] = [
     label: 'Data Quality',
     icon: Shield,
     items: [
-      { href: '/rules',     label: 'Rules',          icon: Shield,     badgeKey: 'pending_rules' },
-      { href: '/assets',    label: 'Data Assets',    icon: Database },
+      { href: '/rules',          label: 'Rules',          icon: Shield,          badgeKey: 'pending_rules' },
+      { href: '/rules/approval-queue', label: 'Approval Queue', icon: ClipboardCheck },
+      { href: '/assets',         label: 'Data Assets',    icon: Database },
       { href: '/schedules', label: 'Schedules',      icon: Calendar },
       { href: '/runs',      label: 'Execution Logs', icon: PlayCircle },
     ],

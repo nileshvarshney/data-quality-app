@@ -127,6 +127,7 @@ export const rulesApi = {
   removeTag: (id: string, tagName: string) => api.delete(`/rules/${id}/tags/${tagName}`),
   // Approval workflow
   approve: (id: string, approvedBy?: string) => api.post(`/rules/${id}/approve`, { approved_by: approvedBy }),
+  submit: (id: string) => api.post(`/rules/${id}/submit`),
   reject: (id: string, rejectedBy: string | undefined, rejectionReason: string) =>
     api.post(`/rules/${id}/reject`, { rejected_by: rejectedBy, rejection_reason: rejectionReason }),
   // Version history

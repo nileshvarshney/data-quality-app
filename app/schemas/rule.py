@@ -23,8 +23,8 @@ class RuleCreate(BaseModel):
     rule_sql: Optional[str] = None
     rule_config: Optional[dict[str, Any]] = None
     severity: Severity = "medium"
-    status: RuleStatus = "active"
-    is_active: bool = True
+    status: RuleStatus = "draft"
+    is_active: bool = False
     created_by: Optional[str] = None
     business_owner_name: Optional[str] = None
     business_owner_email: Optional[str] = None

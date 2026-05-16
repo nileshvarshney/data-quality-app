@@ -6,7 +6,7 @@ import SeverityBadge from '@/components/common/SeverityBadge'
 import Breadcrumbs from '@/components/common/Breadcrumbs'
 import {
   Play, CheckCircle, XCircle, History, RotateCcw, Loader2, ThumbsUp, ThumbsDown,
-  Clock, User, Copy, AlertTriangle, Tag,
+  Clock, User, Copy, AlertTriangle, Tag, Send,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useTimezone } from '@/contexts/TimezoneContext'
@@ -493,11 +493,17 @@ function VersionHistoryPane({
 // ── Approval panel ────────────────────────────────────────────────────────────
 
 function ApprovalPanel({ rule, onUpdate }: { rule: RuleDetail; onUpdate: () => void }) {
-  const [busy, setBusy] = useState<'approve' | 'reject' | null>(null)
+  const [busy, setBusy] = useState<'submit' | 'approve' | 'reject' | null>(null)
   const [rejectReason, setRejectReason] = useState('')
   const [showRejectForm, setShowRejectForm] = useState(false)
 
   if (!['pending_review', 'draft'].includes(rule.status)) return null
+
+  const handleSubmit = async () => {
+    setBusy('submit')
+    try { await rulesApi.submit(rule.rule_id); onUpdate() }
+    finally { setBusy(null) }
+  }
 
   const handleApprove = async () => {
     setBusy('approve')
@@ -514,6 +520,28 @@ function ApprovalPanel({ rule, onUpdate }: { rule: RuleDetail; onUpdate: () => v
       setRejectReason('')
       onUpdate()
     } finally { setBusy(null) }
+  }
+
+  if (rule.status === 'draft') {
+    return (
+      <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-6">
+        <p className="text-sm font-semibold text-gray-700 mb-1">This rule is a draft</p>
+        <p className="text-xs text-gray-500 mb-3">Submit for review when it&apos;s ready for an approver to evaluate.</p>
+        {rule.rejection_reason && (
+          <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+            <span className="font-medium">Rejected: </span>{rule.rejection_reason}
+          </div>
+        )}
+        <button
+          onClick={handleSubmit}
+          disabled={!!busy}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50"
+        >
+          {busy === 'submit' ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+          Submit for Review
+        </button>
+      </div>
+    )
   }
 
   return (
