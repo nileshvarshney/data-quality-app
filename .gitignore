@@ -15,6 +15,10 @@ build
 frontend/node_modules
 frontend/.next
 frontend/out
+*.tsbuildinfo
+
+# Superpowers workspace
+.superpowers/
 
 # IDE
 .vscode
