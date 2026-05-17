@@ -146,6 +146,14 @@ def create_tables():
     with engine.connect() as conn:
         conn.execute(text(f'CREATE DATABASE IF NOT EXISTS "{db_name}"'))
         conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{db_name}"."{schema_name}"'))
+        conn.execute(text(
+            "ALTER TABLE IF EXISTS snowflake_connections "
+            "ADD COLUMN IF NOT EXISTS connection_type VARCHAR(50) DEFAULT 'named'"
+        ))
+        conn.execute(text(
+            "ALTER TABLE IF EXISTS snowflake_connections "
+            "ADD COLUMN IF NOT EXISTS is_primary_target BOOLEAN DEFAULT FALSE"
+        ))
         conn.commit()
 
     # Snowflake doesn't support indexes on standard tables — strip them

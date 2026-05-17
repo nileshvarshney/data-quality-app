@@ -1,6 +1,7 @@
 """Tests for platform/target connection separation."""
 import pytest
 from app.core.config import settings
+from app.db.models import SnowflakeConnection
 
 
 def test_platform_settings_use_sf_prefix():
@@ -28,3 +29,10 @@ def test_env_file_not_configured():
         inner = getattr(config_class, "Config", None)
         if inner:
             assert not hasattr(inner, "env_file") or getattr(inner, "env_file", None) is None
+
+
+def test_snowflake_connection_has_new_columns():
+    """SnowflakeConnection model must have connection_type and is_primary_target."""
+    cols = {c.key for c in SnowflakeConnection.__table__.columns}
+    assert "connection_type" in cols
+    assert "is_primary_target" in cols

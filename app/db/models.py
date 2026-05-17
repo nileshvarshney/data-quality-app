@@ -355,6 +355,8 @@ class SnowflakeConnection(Base):
     default_schema: Mapped[str | None] = mapped_column(String(200))
     description: Mapped[str | None] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    connection_type: Mapped[str] = mapped_column(String(50), default="named")
+    is_primary_target: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
 
