@@ -6,7 +6,7 @@ import {
   Shield, CheckCircle, XCircle, Activity, Clock,
   ChevronRight, RefreshCw, Play, AlertTriangle, Loader2,
   FileText, Bot, Database,
-  Columns, Star, Tag, BookOpen, Zap, Pencil, EyeOff, TrendingUp, GitFork,
+  Columns, Star, Tag, BookOpen, Zap, Pencil, EyeOff, TrendingUp, GitFork, GitCompare,
 } from 'lucide-react'
 import { dashboardApi, executionsApi, aiApi, assetsApi, glossaryApi } from '@/services/apiClient'
 import { profilingApi } from '@/services/profilingApi'
@@ -21,6 +21,7 @@ import MetricInfo, { METRICS } from '@/components/common/MetricInfo'
 import { useTheme } from '@/components/layout/ThemeProvider'
 import { useTimezone } from '@/contexts/TimezoneContext'
 import { LineageTab } from '@/components/lineage/LineageTab'
+import { SchemaDriftTab } from '@/components/schema-drift/SchemaDriftTab'
 
 function scoreTextColor(s: number) {
   if (s >= 95) return 'text-green-600'; if (s >= 80) return 'text-yellow-600'
@@ -197,7 +198,7 @@ export default function TableDashboardPage() {
   const [expandedRun, setExpandedRun] = useState<string | null>(null)
 
   // Tabs
-  const [activeTab, setActiveTab] = useState<'quality' | 'schema' | 'lineage' | 'trends'>('quality')
+  const [activeTab, setActiveTab] = useState<'quality' | 'schema' | 'lineage' | 'drift' | 'trends'>('quality')
   const [driftCount, setDriftCount] = useState(0)
   const [columns, setColumns]   = useState<any[]>([])
   const [colLoading, setColLoading] = useState(false)
@@ -385,10 +386,11 @@ export default function TableDashboardPage() {
       {/* Tab navigation */}
       <div className="flex gap-1 border-b border-gray-200">
         {([
-          { id: 'quality',  label: 'Quality',         icon: <Shield size={14} /> },
-          { id: 'schema',   label: 'Schema',           icon: <Columns size={14} /> },
-          { id: 'lineage',  label: 'Lineage',          icon: <GitFork size={14} /> },
-          { id: 'trends',   label: 'Profile Trends',   icon: <TrendingUp size={14} /> },
+          { id: 'quality', label: 'Quality',       icon: <Shield size={14} /> },
+          { id: 'schema',  label: 'Schema',         icon: <Columns size={14} /> },
+          { id: 'lineage', label: 'Lineage',         icon: <GitFork size={14} /> },
+          { id: 'drift',   label: 'Schema Drift',   icon: <GitCompare size={14} /> },
+          { id: 'trends',  label: 'Profile Trends', icon: <TrendingUp size={14} /> },
         ] as const).map(tab => (
           <button
             key={tab.id}
@@ -934,6 +936,11 @@ export default function TableDashboardPage() {
         <div className="py-4">
           <LineageTab assetId={assetId} />
         </div>
+      )}
+
+      {/* ── Schema Drift tab ────────────────────────────────────── */}
+      {activeTab === 'drift' && (
+        <SchemaDriftTab assetId={assetId} />
       )}
 
       {/* ── Profile Trends tab ──────────────────────────────────── */}
