@@ -95,3 +95,18 @@ def test_mask_primary_target():
     result = _mask(conn)
     assert result["connection_type"] == "target"
     assert result["is_primary_target"] is True
+
+
+def test_platform_info_returns_expected_keys():
+    """GET /config/platform-info response shape must match the spec."""
+    from app.api.config import get_platform_info
+    import asyncio
+    result = asyncio.run(get_platform_info())
+    assert "account" in result
+    assert "user" in result
+    assert "warehouse" in result
+    assert "role" in result
+    assert "app_database" in result
+    assert "app_schema" in result
+    assert "has_password" in result
+    assert "password" not in result

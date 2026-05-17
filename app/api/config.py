@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_db
 from app.services import config_service
 from app.core.security import get_current_user
+from app.core.config import settings
 
 logger = logging.getLogger("dq_platform.config")
 router = APIRouter(prefix="/config", tags=["Configuration"])
@@ -17,6 +18,20 @@ async def get_display_timezone(db: AsyncSession = Depends(get_db)):
     """Return the configured display timezone — public endpoint, no auth required."""
     value = await config_service.get_value("display_timezone", db)
     return {"timezone": value or "America/Los_Angeles"}
+
+
+@router.get("/platform-info")
+async def get_platform_info():
+    """Return non-sensitive platform Snowflake connection info (sourced from env vars)."""
+    return {
+        "account": settings.sf_platform_account or "(not set)",
+        "user": settings.sf_platform_user or "(not set)",
+        "warehouse": settings.sf_platform_warehouse,
+        "role": settings.sf_platform_role,
+        "app_database": settings.snowflake_app_database,
+        "app_schema": settings.snowflake_app_schema,
+        "has_password": bool(settings.sf_platform_password),
+    }
 
 
 class ConfigUpdate(BaseModel):
