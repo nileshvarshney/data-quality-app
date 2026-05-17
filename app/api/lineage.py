@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
 from app.db.database import get_db
@@ -81,7 +81,12 @@ async def get_lineage_graph(
     if not obj:
         raise HTTPException(status_code=404, detail="Object not found")
 
-    max_depth = 999 if depth == "all" else int(depth)
+    try:
+        max_depth = 999 if depth == "all" else int(depth)
+        if max_depth < 0:
+            raise ValueError
+    except ValueError:
+        raise HTTPException(status_code=400, detail="depth must be '1', '2', '3', or 'all'")
 
     visited_ids: set[str] = {object_id}
     frontier: set[str] = {object_id}
@@ -207,21 +212,21 @@ async def get_lineage_columns(object_id: str, db: AsyncSession = Depends(get_db)
 @router.get("/search")
 async def search_lineage_objects(
     q: str | None = None,
-    type: str | None = None,
+    object_type: str | None = None,
     schema: str | None = None,
     domain: str | None = None,
     owner: str | None = None,
     status: str | None = None,
     min_quality: float | None = None,
-    limit: int = 50,
+    limit: int = Query(default=50, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
 ):
     """Search DataObjects by name, type, schema, domain, owner, status, or minimum quality score."""
     stmt = select(DataObject)
     if q:
         stmt = stmt.where(DataObject.object_name.ilike(f"%{q}%"))
-    if type:
-        stmt = stmt.where(DataObject.object_type == type)
+    if object_type:
+        stmt = stmt.where(DataObject.object_type == object_type)
     if schema:
         stmt = stmt.where(DataObject.schema_name == schema)
     if domain:
