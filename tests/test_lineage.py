@@ -1,4 +1,5 @@
 import pytest
+from httpx import AsyncClient, ASGITransport
 from app.api.lineage import extract_table_refs
 
 
@@ -45,17 +46,24 @@ def test_returns_uppercase():
     assert "MYMIXEDCASETABLE" in refs
 
 
-import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
-from httpx import AsyncClient, ASGITransport
-
-
 @pytest.mark.asyncio
 async def test_get_lineage_404():
     from app.main import app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/lineage/nonexistent-id-12345")
-    assert response.status_code == 404
+    from app.db.database import get_db
+    from unittest.mock import AsyncMock
+
+    async def mock_db():
+        m = AsyncMock()
+        m.get = AsyncMock(return_value=None)
+        yield m
+
+    app.dependency_overrides[get_db] = mock_db
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get("/lineage/nonexistent-id-12345")
+        assert response.status_code == 404
+    finally:
+        app.dependency_overrides.pop(get_db, None)
 
 
 @pytest.mark.asyncio

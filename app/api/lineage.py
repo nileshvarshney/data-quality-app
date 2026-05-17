@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import sqlglot
 import sqlglot.expressions as exp
@@ -10,7 +11,7 @@ from app.db.models import (
     DataAsset, ColumnMetadata, ColumnProfileHistory,
     DataClassification, GlossaryTerm, GlossaryTermAsset,
 )
-from app.core.security import get_current_user
+from app.core.security import get_current_user, check_domain_access
 
 logger = logging.getLogger("dq_platform.lineage")
 
@@ -57,6 +58,7 @@ async def _enrich(asset: DataAsset, db: AsyncSession) -> dict:
     cls_result = await db.execute(
         select(DataClassification.classification)
         .where(DataClassification.asset_id == asset.asset_id)
+        .distinct()
     )
     classifications = list(cls_result.scalars().all())
 
@@ -87,15 +89,17 @@ async def _enrich(asset: DataAsset, db: AsyncSession) -> dict:
 async def get_lineage(
     asset_id: str,
     db: AsyncSession = Depends(get_db),
-    _user=Depends(get_current_user),
+    user=Depends(get_current_user),
 ):
     asset = await db.get(DataAsset, asset_id)
     if asset is None:
         raise HTTPException(status_code=404, detail="Asset not found")
 
-    # ── Upstream: tables/views referenced in this asset's view SQL ──────────
+    check_domain_access(user, asset.domain_id)
+
+    # ── Upstream ──────────────────────────────────────────────────────────────
     upstream_assets: list[DataAsset] = []
-    if asset.view_definition:
+    if asset.view_definition and asset.connection_id:
         refs = extract_table_refs(asset.view_definition)
         if refs:
             result = await db.execute(
@@ -109,24 +113,28 @@ async def get_lineage(
             )
             upstream_assets = list(result.scalars().all())
 
-    # ── Downstream: other views whose SQL references this asset's table name ─
+    # ── Downstream ────────────────────────────────────────────────────────────
     downstream_assets: list[DataAsset] = []
-    candidate_result = await db.execute(
-        select(DataAsset).where(
-            and_(
-                DataAsset.view_definition.ilike(f"%{asset.sf_table_name}%"),
-                DataAsset.connection_id == asset.connection_id,
-                DataAsset.asset_id != asset_id,
+    if asset.connection_id:
+        candidate_result = await db.execute(
+            select(DataAsset).where(
+                and_(
+                    DataAsset.view_definition.ilike(f"%{asset.sf_table_name}%"),
+                    DataAsset.connection_id == asset.connection_id,
+                    DataAsset.asset_id != asset_id,
+                )
             )
         )
-    )
-    for candidate in candidate_result.scalars().all():
-        refs = extract_table_refs(candidate.view_definition or "")
-        if asset.sf_table_name.upper() in refs:
-            downstream_assets.append(candidate)
+        for candidate in candidate_result.scalars().all():
+            refs = extract_table_refs(candidate.view_definition or "")
+            if asset.sf_table_name.upper() in refs:
+                downstream_assets.append(candidate)
 
+    asset_node = await _enrich(asset, db)
+    upstream_nodes = await asyncio.gather(*[_enrich(a, db) for a in upstream_assets]) if upstream_assets else []
+    downstream_nodes = await asyncio.gather(*[_enrich(a, db) for a in downstream_assets]) if downstream_assets else []
     return {
-        "asset": await _enrich(asset, db),
-        "upstream": [await _enrich(a, db) for a in upstream_assets],
-        "downstream": [await _enrich(a, db) for a in downstream_assets],
+        "asset": asset_node,
+        "upstream": list(upstream_nodes),
+        "downstream": list(downstream_nodes),
     }
