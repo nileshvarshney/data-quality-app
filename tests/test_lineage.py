@@ -43,3 +43,25 @@ def test_returns_uppercase():
     sql = "SELECT * FROM MyMixedCaseTable"
     refs = extract_table_refs(sql)
     assert "MYMIXEDCASETABLE" in refs
+
+
+import pytest
+from unittest.mock import AsyncMock, patch, MagicMock
+from httpx import AsyncClient, ASGITransport
+
+
+@pytest.mark.asyncio
+async def test_get_lineage_404():
+    from app.main import app
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/lineage/nonexistent-id-12345")
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_extract_refs_used_for_upstream():
+    """extract_table_refs is the source of truth for upstream detection."""
+    from app.api.lineage import extract_table_refs
+    sql = "SELECT o.*, c.name FROM ORDERS o JOIN CUSTOMERS c ON o.cust_id = c.id"
+    refs = extract_table_refs(sql)
+    assert set(refs) == {"ORDERS", "CUSTOMERS"}

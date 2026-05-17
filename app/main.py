@@ -19,6 +19,7 @@ from app.api import (
     # §53 Catalog & Governance
     glossary, classifications, columns, data_products,
     comments, announcements, access_requests, tags, usage, catalog,
+    lineage,
     # §54-§68 Advanced features
     governance, contracts, compliance, cost, incidents,
     anomaly, marketplace, mesh, observability, cicd,
@@ -174,6 +175,7 @@ app.include_router(access_requests.router)
 app.include_router(tags.router)
 app.include_router(usage.router)
 app.include_router(catalog.router)
+app.include_router(lineage.router)
 
 # §54-§68 Advanced feature routers
 app.include_router(governance.router)
