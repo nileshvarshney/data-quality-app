@@ -366,14 +366,6 @@ export const costApi = {
   listConfigs:  () => api.get('/cost/configs'),
 }
 
-// Lineage (Atlan-style object graph)
-export const lineageApi = {
-  object:  (id: string) => api.get(`/api/lineage/object/${id}`),
-  graph:   (id: string, depth: string = '2') => api.get(`/api/lineage/graph/${id}?depth=${depth}`),
-  impact:  (id: string) => api.get(`/api/lineage/impact/${id}`),
-  columns: (id: string) => api.get(`/api/lineage/columns/${id}`),
-  search:  (params: Record<string, string>) => api.get('/api/lineage/search', { params }),
-}
 
 // Observability
 export const observabilityApi = {

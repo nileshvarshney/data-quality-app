@@ -819,58 +819,6 @@ class IncidentRunbook(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
 
 
-class DataObject(Base):
-    __tablename__ = "data_objects"
-
-    object_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
-    object_name: Mapped[str] = mapped_column(String(200), nullable=False)
-    object_type: Mapped[str] = mapped_column(String(30), nullable=False)  # TABLE | VIEW | MATERIALIZED_VIEW
-    database_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    schema_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    domain: Mapped[str | None] = mapped_column(String(100))
-    sub_domain: Mapped[str | None] = mapped_column(String(100))
-    owner: Mapped[str | None] = mapped_column(String(200))
-    quality_score: Mapped[float | None] = mapped_column(Float)
-    status: Mapped[str | None] = mapped_column(String(50))
-    certification_status: Mapped[str | None] = mapped_column(String(50))
-    tags: Mapped[list | None] = mapped_column(JSON)
-    last_refreshed_at: Mapped[datetime | None] = mapped_column(DateTime)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
-
-
-class DataObjectRelationship(Base):
-    __tablename__ = "data_object_relationships"
-    __table_args__ = (
-        Index("ix_rel_source", "source_object_id"),
-        Index("ix_rel_target", "target_object_id"),
-    )
-
-    relationship_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
-    source_object_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_objects.object_id", ondelete="CASCADE"), nullable=False)
-    target_object_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_objects.object_id", ondelete="CASCADE"), nullable=False)
-    relationship_type: Mapped[str] = mapped_column(String(30), nullable=False)  # READS_FROM | TRANSFORMS | JOINS_WITH | AGGREGATES_FROM | FILTERS_FROM | DERIVED_FROM
-    transformation_logic: Mapped[str | None] = mapped_column(Text)
-    confidence_score: Mapped[float | None] = mapped_column(Float)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
-
-
-class DataObjectColumn(Base):
-    __tablename__ = "data_object_columns"
-    __table_args__ = (
-        Index("ix_doc_object_id", "object_id"),
-    )
-
-    column_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
-    object_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_objects.object_id", ondelete="CASCADE"), nullable=False)
-    column_name: Mapped[str] = mapped_column(String(200), nullable=False)
-    data_type: Mapped[str | None] = mapped_column(String(100))
-    ordinal_position: Mapped[int | None] = mapped_column(Integer)
-    is_nullable: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
-
 
 class DataSharingAgreement(Base):
     __tablename__ = "data_sharing_agreements"

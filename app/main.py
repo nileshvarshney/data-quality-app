@@ -21,7 +21,7 @@ from app.api import (
     comments, announcements, access_requests, tags, usage, catalog,
     # §54-§68 Advanced features
     governance, contracts, compliance, cost, incidents,
-    anomaly, lineage, marketplace, mesh, observability, cicd,
+    anomaly, marketplace, mesh, observability, cicd,
     privacy, admin,
 )
 from app.api.users import router as users_router
@@ -79,8 +79,6 @@ async def lifespan(app: FastAPI):
         from app.services.config_service import seed_config
         async with AsyncSessionLocal() as db:
             await seed_config(db)
-        from app.db.database import seed_lineage_data
-        await seed_lineage_data()
         start_scheduler()
         from app.services.scheduler_service import load_all_schedules
         async with AsyncSessionLocal() as db:
@@ -184,7 +182,6 @@ app.include_router(compliance.router)
 app.include_router(cost.router)
 app.include_router(incidents.router)
 app.include_router(anomaly.router)
-app.include_router(lineage.router)
 app.include_router(marketplace.router)
 app.include_router(mesh.router)
 app.include_router(observability.router)
