@@ -105,6 +105,8 @@ export const connectionsApi = {
   tables: (id: string, database: string, schema: string) => api.get(`/connections/${id}/tables`, { params: { database, schema } }),
   columns: (id: string, database: string, schema: string, table: string) =>
     api.get(`/connections/${id}/columns`, { params: { database, schema, table } }),
+  getPrimaryTarget: () => api.get('/connections/primary-target'),
+  setPrimaryTarget: (id: string) => api.put(`/connections/${id}/set-primary-target`),
 }
 
 // Rules
