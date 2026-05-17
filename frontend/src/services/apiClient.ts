@@ -366,14 +366,13 @@ export const costApi = {
   listConfigs:  () => api.get('/cost/configs'),
 }
 
-// Lineage
+// Lineage (Atlan-style object graph)
 export const lineageApi = {
-  graph:      (assetId: string) => api.get(`/assets/${assetId}/lineage/graph`),
-  upstream:   (assetId: string) => api.get(`/assets/${assetId}/lineage/upstream`),
-  downstream: (assetId: string) => api.get(`/assets/${assetId}/lineage/downstream`),
-  impact:     (assetId: string) => api.get(`/assets/${assetId}/lineage/impact`),
-  create:     (assetId: string, data: object) => api.post(`/assets/${assetId}/lineage`, data),
-  delete:     (lineageId: string) => api.delete(`/assets/lineage/${lineageId}`),
+  object:  (id: string) => api.get(`/api/lineage/object/${id}`),
+  graph:   (id: string, depth: string = '2') => api.get(`/api/lineage/graph/${id}?depth=${depth}`),
+  impact:  (id: string) => api.get(`/api/lineage/impact/${id}`),
+  columns: (id: string) => api.get(`/api/lineage/columns/${id}`),
+  search:  (params: Record<string, string>) => api.get('/api/lineage/search', { params }),
 }
 
 // Observability
