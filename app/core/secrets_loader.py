@@ -9,7 +9,7 @@ The loaded key/value pairs are merged into `settings` so the rest of the app
 reads them from the same `settings` object without any code changes.
 
 This module is intentionally optional: if neither backend is configured the
-function is a no-op.  Local dev continues to use .env as normal.
+function is a no-op.  Local dev uses OS environment variables directly.
 """
 import logging
 
@@ -19,7 +19,7 @@ logger = logging.getLogger("dq_platform.secrets_loader")
 _SENSITIVE_KEYS = {
     "secret_key",
     "encryption_key",
-    "snowflake_password",
+    "sf_platform_password",
     "openai_api_key",
     "anthropic_api_key",
     "gemini_api_key",
