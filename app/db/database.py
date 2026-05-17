@@ -1,9 +1,12 @@
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, Session, DeclarativeBase
 from snowflake.sqlalchemy import URL as SnowflakeURL
 from app.core.config import settings
+
+_log = logging.getLogger(__name__)
 
 
 class Base(DeclarativeBase):
@@ -12,13 +15,13 @@ class Base(DeclarativeBase):
 
 def _build_snowflake_url() -> SnowflakeURL:
     return SnowflakeURL(
-        account=settings.snowflake_account,
-        user=settings.snowflake_user,
-        password=settings.snowflake_password,
+        account=settings.sf_platform_account,
+        user=settings.sf_platform_user,
+        password=settings.sf_platform_password,
         database=settings.snowflake_app_database,
         schema=settings.snowflake_app_schema,
-        warehouse=settings.snowflake_warehouse,
-        role=settings.snowflake_role,
+        warehouse=settings.sf_platform_warehouse,
+        role=settings.sf_platform_role,
     )
 
 
@@ -136,7 +139,32 @@ AsyncSessionLocal = get_session_ctx
 
 def create_tables():
     """Idempotent table creation. Called once at startup via asyncio.to_thread."""
-    Base.metadata.create_all(bind=engine, checkfirst=True)
+    db_name = settings.snowflake_app_database
+    schema_name = settings.snowflake_app_schema
+
+    # Ensure the app database and schema exist before creating tables
+    with engine.connect() as conn:
+        conn.execute(text(f'CREATE DATABASE IF NOT EXISTS "{db_name}"'))
+        conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{db_name}"."{schema_name}"'))
+        conn.commit()
+
+    # Snowflake doesn't support indexes on standard tables — strip them
+    for table in Base.metadata.tables.values():
+        table.indexes.clear()
+
+    # Create tables one at a time (sorted by FK dependency), skipping any that already exist.
+    # Snowflake's checkfirst inspection is unreliable, so we catch "already exists" errors.
+    created = skipped = 0
+    for table in Base.metadata.sorted_tables:
+        try:
+            table.create(bind=engine, checkfirst=False)
+            created += 1
+        except Exception as exc:
+            if "already exists" in str(exc).lower():
+                skipped += 1
+            else:
+                _log.warning("Could not create table %s: %s", table.name, exc)
+    _log.info("create_tables: %d created, %d already existed", created, skipped)
 
 
 async def check_db_health() -> tuple[bool, str]:

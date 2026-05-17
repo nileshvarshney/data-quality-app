@@ -92,7 +92,7 @@ async def test_database(db: AsyncSession = Depends(get_db)):
     try:
         from sqlalchemy import text
         await db.execute(text("SELECT 1"))
-        return {"status": "ok", "message": "PostgreSQL connection successful"}
+        return {"status": "ok", "message": "Platform Snowflake connection successful"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
