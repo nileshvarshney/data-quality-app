@@ -5,10 +5,10 @@ import Link from 'next/link'
 import {
   Shield, CheckCircle, XCircle, Activity, Clock,
   ChevronRight, RefreshCw, Play, AlertTriangle, Loader2,
-  FileText, Bot, Database, GitBranch,
+  FileText, Bot, Database,
   Columns, Star, Tag, BookOpen, Zap, Pencil, EyeOff, TrendingUp,
 } from 'lucide-react'
-import { dashboardApi, executionsApi, aiApi, assetsApi, glossaryApi, lineageApi } from '@/services/apiClient'
+import { dashboardApi, executionsApi, aiApi, assetsApi, glossaryApi } from '@/services/apiClient'
 import { profilingApi } from '@/services/profilingApi'
 import QualityTrendChart from '@/components/charts/QualityTrendChart'
 import ProfileTrendsTab from '@/components/profiling/ProfileTrendsTab'
@@ -20,16 +20,6 @@ import Tooltip from '@/components/common/Tooltip'
 import MetricInfo, { METRICS } from '@/components/common/MetricInfo'
 import { useTheme } from '@/components/layout/ThemeProvider'
 import { useTimezone } from '@/contexts/TimezoneContext'
-import dynamic from 'next/dynamic'
-const LineageGraph = dynamic(
-  () => import('@/components/lineage/LineageGraph'),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="h-[400px] bg-white dark:bg-[var(--surface)] rounded-xl border border-gray-200 dark:border-[var(--border)] animate-pulse" />
-    ),
-  }
-)
 
 function scoreTextColor(s: number) {
   if (s >= 95) return 'text-green-600'; if (s >= 80) return 'text-yellow-600'
@@ -206,7 +196,7 @@ export default function TableDashboardPage() {
   const [expandedRun, setExpandedRun] = useState<string | null>(null)
 
   // Tabs
-  const [activeTab, setActiveTab] = useState<'quality' | 'schema' | 'lineage' | 'trends'>('quality')
+  const [activeTab, setActiveTab] = useState<'quality' | 'schema' | 'trends'>('quality')
   const [driftCount, setDriftCount] = useState(0)
   const [columns, setColumns]   = useState<any[]>([])
   const [colLoading, setColLoading] = useState(false)
@@ -219,9 +209,6 @@ export default function TableDashboardPage() {
   const [certifying, setCertifying] = useState(false)
 
   const [glossaryTerms, setGlossaryTerms] = useState<any[]>([])
-  const [lineageObjectId, setLineageObjectId] = useState<string | null>(null)
-  const [lineageAllObjects, setLineageAllObjects] = useState<any[]>([])
-  const [lineagePickerSearch, setLineagePickerSearch] = useState('')
 
   const tableLastProfiledAt = useMemo(
     () => columns
@@ -266,23 +253,6 @@ export default function TableDashboardPage() {
       }).finally(() => { setColLoading(false); setColFetched(true) })
     }
   }, [activeTab, assetId, colFetched])
-
-  // Look up lineage objectId by table name when lineage tab is opened, and load all objects for picker
-  useEffect(() => {
-    if (activeTab !== 'lineage') return
-    // Fetch all available lineage objects for the picker
-    lineageApi.search({})
-      .then((res: any) => setLineageAllObjects(res.data?.results ?? []))
-      .catch(() => {})
-    // Try to auto-match by table name
-    if (!data?.sf_table_name) return
-    lineageApi.search({ q: data.sf_table_name })
-      .then((res: any) => {
-        const results = res.data?.results ?? []
-        if (results.length > 0) setLineageObjectId(results[0].object_id)
-      })
-      .catch(() => {})
-  }, [activeTab, data?.sf_table_name])
 
   const handleCertify = async (status: string) => {
     setCertifyOpen(false); setCertifying(true)
@@ -416,7 +386,6 @@ export default function TableDashboardPage() {
         {([
           { id: 'quality',  label: 'Quality',         icon: <Shield size={14} /> },
           { id: 'schema',   label: 'Schema',           icon: <Columns size={14} /> },
-          { id: 'lineage',  label: 'Lineage',          icon: <GitBranch size={14} /> },
           { id: 'trends',   label: 'Profile Trends',   icon: <TrendingUp size={14} /> },
         ] as const).map(tab => (
           <button
@@ -970,98 +939,6 @@ export default function TableDashboardPage() {
         </div>
       )}
 
-      {/* ── Lineage tab ─────────────────────────────────────────── */}
-      {activeTab === 'lineage' && (
-        <div className="space-y-4">
-
-          {/* ── Certification card ── */}
-          <div className="bg-white dark:bg-[var(--surface)] rounded-xl border border-gray-200 dark:border-[var(--border)] p-5 flex items-center gap-4 card-accent-top">
-            <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-500/10">
-              <Star size={18} className="text-indigo-500" />
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-gray-900 dark:text-[var(--text)]">Certification Status</p>
-              <p className="text-xs text-gray-500 dark:text-[var(--text-3)] mt-0.5">
-                {data.certification_status === 'certified'
-                  ? `Certified${data.certified_by ? ` by ${data.certified_by}` : ''}${data.certified_at ? ` · ${new Date(data.certified_at).toLocaleDateString()}` : ''}`
-                  : data.certification_status === 'warning'
-                  ? 'Warning — data quality review needed'
-                  : 'Not yet certified'}
-              </p>
-            </div>
-            <CertificationBadge status={data.certification_status || 'uncertified'} />
-            <div className="relative">
-              <button
-                onClick={() => setCertifyOpen(o => !o)}
-                disabled={certifying}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-gray-200 dark:border-[var(--border)] rounded-lg hover:bg-gray-50 dark:hover:bg-[var(--surface-sub)] text-gray-600 dark:text-[var(--text-2)] disabled:opacity-50"
-              >
-                {certifying ? <Loader2 size={11} className="animate-spin" /> : <Pencil size={11} />} Change
-              </button>
-              {certifyOpen && (
-                <div className="absolute right-0 top-9 z-20 bg-white dark:bg-[var(--surface)] border border-gray-200 dark:border-[var(--border)] rounded-xl shadow-xl py-1 w-36">
-                  {['certified', 'warning', 'uncertified'].map(s => (
-                    <button key={s} onClick={() => handleCertify(s)}
-                      className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 dark:hover:bg-[var(--surface-sub)] capitalize text-gray-700 dark:text-[var(--text-2)]">
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {lineageObjectId ? (
-            <>
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-slate-400">Viewing lineage for <span className="font-semibold text-slate-200">{lineageAllObjects.find(o => o.object_id === lineageObjectId)?.object_name ?? lineageObjectId}</span></span>
-                <button onClick={() => setLineageObjectId(null)} className="text-xs text-indigo-400 hover:underline">Browse all objects</button>
-              </div>
-              <LineageGraph objectId={lineageObjectId} />
-            </>
-          ) : (
-            <div className="bg-slate-900 rounded-xl border border-slate-700 p-6">
-              <p className="text-sm font-semibold text-slate-200 mb-1">Select a lineage object to explore</p>
-              <p className="text-xs text-slate-400 mb-4">
-                {data?.sf_table_name
-                  ? `No lineage object matched "${data.sf_table_name}". Pick one below.`
-                  : 'Browse available tables, views, and materialized views.'}
-              </p>
-              <input
-                type="text"
-                placeholder="Search by name…"
-                value={lineagePickerSearch}
-                onChange={e => setLineagePickerSearch(e.target.value)}
-                className="w-full mb-3 px-3 py-2 text-sm bg-slate-800 border border-slate-600 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-              />
-              <div className="space-y-1.5 max-h-72 overflow-y-auto">
-                {lineageAllObjects
-                  .filter(o => !lineagePickerSearch || o.object_name.toLowerCase().includes(lineagePickerSearch.toLowerCase()))
-                  .map(obj => (
-                    <button
-                      key={obj.object_id}
-                      onClick={() => setLineageObjectId(obj.object_id)}
-                      className="w-full text-left px-3 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-indigo-500 transition-colors flex items-center gap-3"
-                    >
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
-                        obj.object_type === 'TABLE' ? 'bg-blue-900 text-blue-300' :
-                        obj.object_type === 'VIEW' ? 'bg-purple-900 text-purple-300' :
-                        'bg-green-900 text-green-300'
-                      }`}>
-                        {obj.object_type === 'MATERIALIZED_VIEW' ? 'MV' : obj.object_type}
-                      </span>
-                      <span className="text-sm text-slate-200 font-medium">{obj.object_name}</span>
-                      <span className="text-xs text-slate-500 ml-auto">{obj.schema_name}</span>
-                    </button>
-                  ))}
-                {lineageAllObjects.length === 0 && (
-                  <p className="text-xs text-slate-500 text-center py-6">No lineage objects found. Restart the API to seed sample data.</p>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   )
 }
