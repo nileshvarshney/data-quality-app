@@ -22,15 +22,6 @@ CONFIG_DEFAULTS: list[dict] = [
     {"category": "database", "key": "snowflake_app_database", "value": "DQ_PLATFORM_DB", "is_secret": False, "description": "Snowflake database where platform tables (rules, runs, users, etc.) are stored"},
     {"category": "database", "key": "snowflake_app_schema",   "value": "DQ_APP",          "is_secret": False, "description": "Snowflake schema within the app database"},
 
-    # Snowflake — source data connections
-    {"category": "snowflake", "key": "snowflake_account", "value": "", "is_secret": False, "description": "Snowflake account identifier (e.g. myorg-myaccount)"},
-    {"category": "snowflake", "key": "snowflake_user", "value": "", "is_secret": False, "description": "Snowflake service account username"},
-    {"category": "snowflake", "key": "snowflake_password", "value": "", "is_secret": True, "description": "Snowflake service account password"},
-    {"category": "snowflake", "key": "snowflake_warehouse", "value": "DQ_EXECUTION_WH", "is_secret": False, "description": "Snowflake warehouse used for rule execution"},
-    {"category": "snowflake", "key": "snowflake_database", "value": "", "is_secret": False, "description": "Default Snowflake source database"},
-    {"category": "snowflake", "key": "snowflake_schema", "value": "PUBLIC", "is_secret": False, "description": "Default Snowflake source schema"},
-    {"category": "snowflake", "key": "snowflake_role", "value": "DQ_PLATFORM_ROLE", "is_secret": False, "description": "Snowflake role for the service account"},
-
     # LLM
     {"category": "llm", "key": "llm_provider", "value": "ollama", "is_secret": False, "description": "Active LLM provider: ollama, openai, claude, gemini_flash"},
     {"category": "llm", "key": "ollama_base_url", "value": "", "is_secret": False, "description": "Base URL for the Ollama API server"},
@@ -76,30 +67,58 @@ CONFIG_DEFAULTS: list[dict] = [
 ]
 
 
+def _first_by_key(result) -> "AppConfig | None":
+    """Return the first row from a query result, safe when duplicates exist."""
+    return result.scalars().first()
+
+
 async def seed_config(db: AsyncSession):
+    # Remove duplicate keys first (keep the newest updated_at per key)
+    all_res = await db.execute(select(AppConfig).order_by(AppConfig.key, AppConfig.updated_at.desc()))
+    seen: set[str] = set()
+    for row in all_res.scalars().all():
+        if row.key in seen:
+            await db.delete(row)
+        else:
+            seen.add(row.key)
+    if seen:
+        await db.flush()
+
     for item in CONFIG_DEFAULTS:
-        result = await db.execute(select(AppConfig).where(AppConfig.key == item["key"]))
-        if not result.scalar_one_or_none():
+        if item["key"] not in seen:
             db.add(AppConfig(config_id=str(uuid.uuid4()), updated_at=datetime.now(timezone.utc).replace(tzinfo=None), **item))
+            await db.flush()
     await db.commit()
 
 
 async def get_all(db: AsyncSession) -> list[AppConfig]:
-    result = await db.execute(select(AppConfig).order_by(AppConfig.category, AppConfig.key))
-    return result.scalars().all()
+    result = await db.execute(select(AppConfig).order_by(AppConfig.category, AppConfig.key, AppConfig.updated_at.desc()))
+    seen: set[str] = set()
+    rows = []
+    for row in result.scalars().all():
+        if row.key not in seen:
+            seen.add(row.key)
+            rows.append(row)
+    return rows
 
 
 async def get_by_category(category: str, db: AsyncSession) -> list[AppConfig]:
     result = await db.execute(
-        select(AppConfig).where(AppConfig.category == category).order_by(AppConfig.key)
+        select(AppConfig).where(AppConfig.category == category).order_by(AppConfig.key, AppConfig.updated_at.desc())
     )
-    return result.scalars().all()
+    seen: set[str] = set()
+    rows = []
+    for row in result.scalars().all():
+        if row.key not in seen:
+            seen.add(row.key)
+            rows.append(row)
+    return rows
 
 
 async def get_value(key: str, db: AsyncSession) -> str | None:
     """Return the config value, decrypting it if it is marked secret."""
-    result = await db.execute(select(AppConfig).where(AppConfig.key == key))
-    row = result.scalar_one_or_none()
+    result = await db.execute(select(AppConfig).where(AppConfig.key == key).order_by(AppConfig.updated_at.desc()))
+    row = _first_by_key(result)
     if row is None:
         return None
     if row.is_secret and row.value:
@@ -108,8 +127,8 @@ async def get_value(key: str, db: AsyncSession) -> str | None:
 
 
 async def set_value(key: str, value: str, user: str, db: AsyncSession) -> AppConfig:
-    result = await db.execute(select(AppConfig).where(AppConfig.key == key))
-    row = result.scalar_one_or_none()
+    result = await db.execute(select(AppConfig).where(AppConfig.key == key).order_by(AppConfig.updated_at.desc()))
+    row = _first_by_key(result)
     if not row:
         raise ValueError(f"Unknown config key: {key}")
     if value != MASKED:
@@ -126,8 +145,8 @@ async def bulk_update(updates: dict[str, str], user: str, db: AsyncSession) -> l
     for key, value in updates.items():
         if value == MASKED:
             continue
-        result = await db.execute(select(AppConfig).where(AppConfig.key == key))
-        row = result.scalar_one_or_none()
+        result = await db.execute(select(AppConfig).where(AppConfig.key == key).order_by(AppConfig.updated_at.desc()))
+        row = _first_by_key(result)
         if row:
             row.value = encrypt(value) if row.is_secret and value else value
             row.updated_by = user

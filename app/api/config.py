@@ -97,32 +97,6 @@ async def test_database(db: AsyncSession = Depends(get_db)):
         return {"status": "error", "message": str(e)}
 
 
-@router.post("/test/snowflake")
-async def test_snowflake(db: AsyncSession = Depends(get_db)):
-    account = await config_service.get_value("snowflake_account", db)
-    user = await config_service.get_value("snowflake_user", db)
-    password = await config_service.get_value("snowflake_password", db)
-    warehouse = await config_service.get_value("snowflake_warehouse", db)
-
-    if not account or not user or not password:
-        return {"status": "error", "message": "Snowflake account, user, and password are required"}
-
-    try:
-        import snowflake.connector
-        conn = snowflake.connector.connect(
-            account=account, user=user, password=password,
-            warehouse=warehouse or "DQ_EXECUTION_WH",
-        )
-        cursor = conn.cursor()
-        cursor.execute("SELECT CURRENT_VERSION()")
-        version = cursor.fetchone()[0]
-        cursor.close()
-        conn.close()
-        return {"status": "ok", "message": f"Snowflake connection successful (version {version})"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-
 @router.post("/test/llm")
 async def test_llm(db: AsyncSession = Depends(get_db)):
     provider_name = await config_service.get_value("llm_provider", db) or "ollama"

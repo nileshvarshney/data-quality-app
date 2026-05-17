@@ -36,3 +36,16 @@ def test_snowflake_connection_has_new_columns():
     cols = {c.key for c in SnowflakeConnection.__table__.columns}
     assert "connection_type" in cols
     assert "is_primary_target" in cols
+
+
+from app.services.config_service import CONFIG_DEFAULTS
+
+
+def test_snowflake_appconfig_keys_removed():
+    """AppConfig must not contain the old snowflake source-data keys."""
+    removed_keys = {
+        "snowflake_account", "snowflake_user", "snowflake_password",
+        "snowflake_warehouse", "snowflake_database", "snowflake_schema", "snowflake_role",
+    }
+    existing_keys = {item["key"] for item in CONFIG_DEFAULTS}
+    assert not removed_keys & existing_keys, f"These keys should be removed: {removed_keys & existing_keys}"
