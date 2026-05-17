@@ -16,6 +16,7 @@ class DataAssetCreate(BaseModel):
     sf_table_name: str
     table_type: Optional[str] = None
     table_description: Optional[str] = None
+    view_definition: Optional[str] = None
     owner_name: Optional[str] = None
     owner_email: Optional[str] = None
     technical_owner_name: Optional[str] = None
@@ -30,6 +31,7 @@ class DataAssetUpdate(BaseModel):
     sf_table_name: Optional[str] = None
     table_type: Optional[str] = None
     table_description: Optional[str] = None
+    view_definition: Optional[str] = None
     owner_name: Optional[str] = None
     owner_email: Optional[str] = None
     technical_owner_name: Optional[str] = None

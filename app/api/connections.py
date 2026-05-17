@@ -350,10 +350,28 @@ async def browse_tables(
         """)
         rows = cur.fetchall()
         col_names = [d[0].lower() for d in cur.description]
+        tables = [dict(zip(col_names, r)) for r in rows]
+
+        # Fetch view definitions for VIEW-type tables
+        view_defs: dict[str, str] = {}
+        view_names = [t["table_name"] for t in tables if str(t.get("table_type", "")).upper() == "VIEW"]
+        if view_names:
+            cur.execute(f"""
+                SELECT table_name, view_definition
+                FROM "{db_safe}".INFORMATION_SCHEMA.VIEWS
+                WHERE UPPER(table_schema) = '{schema_safe.upper()}'
+            """)
+            for vrow in cur.fetchall():
+                view_defs[vrow[0].upper()] = vrow[1] or ""
+
         cur.close()
         sf.close()
+
+        for t in tables:
+            t["view_definition"] = view_defs.get(t["table_name"].upper(), "") or None
+
         return {
-            "tables": [dict(zip(col_names, r)) for r in rows],
+            "tables": tables,
             "database": database,
             "schema": schema,
         }

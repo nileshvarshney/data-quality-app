@@ -10,6 +10,7 @@ from app.db.database import get_db
 from app.db.models import (
     DataAsset, ColumnMetadata, ColumnProfileHistory,
     DataClassification, GlossaryTerm, GlossaryTermAsset,
+    SnowflakeConnection,
 )
 from app.core.security import get_current_user, check_domain_access
 
@@ -85,6 +86,25 @@ async def _enrich(asset: DataAsset, db: AsyncSession) -> dict:
     }
 
 
+def _sync_fetch_view_definition(conn: SnowflakeConnection, asset: DataAsset) -> str | None:
+    """Synchronous Snowflake call — run via asyncio.to_thread."""
+    try:
+        from app.api.connections import _open_connector
+        sf = _open_connector(conn)
+        cur = sf.cursor()
+        db_part = f'"{asset.sf_database_name}".' if asset.sf_database_name else ""
+        cur.execute(
+            f"SELECT GET_DDL('VIEW', '{db_part}\"{asset.sf_schema_name}\".\"{asset.sf_table_name}\"')"
+        )
+        row = cur.fetchone()
+        cur.close()
+        sf.close()
+        return row[0] if row else None
+    except Exception as exc:
+        logger.debug("view_definition fetch failed for %s: %s", asset.sf_table_name, exc)
+        return None
+
+
 @router.get("/{asset_id}")
 async def get_lineage(
     asset_id: str,
@@ -96,6 +116,16 @@ async def get_lineage(
         raise HTTPException(status_code=404, detail="Asset not found")
 
     check_domain_access(user, asset.domain_id)
+
+    # ── Lazy-fetch view_definition for VIEW assets that don't have it stored ──
+    is_view = asset.table_type and "VIEW" in asset.table_type.upper()
+    if is_view and not asset.view_definition and asset.connection_id:
+        sf_conn = await db.get(SnowflakeConnection, asset.connection_id)
+        if sf_conn:
+            view_def = await asyncio.to_thread(_sync_fetch_view_definition, sf_conn, asset)
+            if view_def:
+                asset.view_definition = view_def
+                await db.commit()
 
     # ── Upstream ──────────────────────────────────────────────────────────────
     upstream_assets: list[DataAsset] = []
