@@ -35,6 +35,10 @@ def test_empty_string_returns_empty():
     assert extract_table_refs("") == []
 
 
+def test_whitespace_only_returns_empty():
+    assert extract_table_refs("   ") == []
+
+
 def test_returns_uppercase():
     sql = "SELECT * FROM MyMixedCaseTable"
     refs = extract_table_refs(sql)
