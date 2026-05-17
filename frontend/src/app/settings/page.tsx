@@ -369,45 +369,18 @@ function ConnectionCard({
 
 // ── Database Tab ─────────────────────────────────────────────────────────────
 
-function parseDbUrl(url: string) {
-  try {
-    const clean = url.replace(/^postgresql\+asyncpg:\/\//, 'postgresql://').replace(/^postgresql:\/\//, 'pg://')
-    const u = new URL(clean.replace(/^pg:\/\//, 'http://'))
-    return {
-      host: u.hostname || 'localhost',
-      port: u.port || '5432',
-      user: decodeURIComponent(u.username) || 'dquser',
-      password: decodeURIComponent(u.password) || '',
-      dbname: (u.pathname || '/dqplatform').replace(/^\//, '') || 'dqplatform',
-    }
-  } catch { return { host: 'localhost', port: '5432', user: 'dquser', password: '', dbname: 'dqplatform' } }
-}
-
-function buildDbUrls(host: string, port: string, user: string, password: string, dbname: string) {
-  const enc = (s: string) => encodeURIComponent(s)
-  const base = `${enc(user)}:${enc(password)}@${host}:${port}/${dbname}`
-  return {
-    database_url: `postgresql+asyncpg://${base}`,
-    sync_database_url: `postgresql://${base}`,
-  }
-}
-
 function DatabaseTab({ onSaveParent }: { onSaveParent: () => Promise<void> }) {
-  const [cfg, setCfg] = useState({ host: 'localhost', port: '5432', user: 'dquser', password: '', dbname: 'dqplatform' })
-  const [poolMin,  setPoolMin]  = useState('1')
-  const [poolMax,  setPoolMax]  = useState('5')
-  const [poolTO,   setPoolTO]   = useState('30')
+  const [appDb,    setAppDb]    = useState('DQ_PLATFORM_DB')
+  const [appSchema, setAppSchema] = useState('DQ_APP')
   const [loading,  setLoading]  = useState(true)
   const [saving,   setSaving]   = useState(false)
   const [saved,    setSaved]    = useState(false)
   const [saveErr,  setSaveErr]  = useState('')
-  const [testSt,   setTestSt]   = useState<TestStatus>({ status: 'idle', message: '' })
   const [health,   setHealth]   = useState<'checking' | 'ok' | 'error'>('checking')
   const [healthMsg, setHealthMsg] = useState('')
-  const [showPass, setShowPass] = useState(false)
-  const [dirty, setDirty] = useState(false)
+  const [dirty,    setDirty]    = useState(false)
 
-  const set = <K extends keyof typeof cfg>(k: K, v: string) => { setCfg(p => ({ ...p, [k]: v })); setDirty(true); setSaved(false) }
+  const inputCls = 'w-full px-3 py-2 border border-gray-300 dark:border-[var(--border)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-[var(--surface)] text-gray-900 dark:text-[var(--text)] font-mono'
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -415,12 +388,9 @@ function DatabaseTab({ onSaveParent }: { onSaveParent: () => Promise<void> }) {
       const res = await configApi.getAll()
       const all: Record<string, string> = {}
       Object.values(res.data.config as Record<string, any[]>).flat().forEach((e: any) => { all[e.key] = e.value ?? '' })
-      const url = all['database_url'] || ''
-      if (url) setCfg(parseDbUrl(url))
-      if (all['db_pool_min'])            setPoolMin(all['db_pool_min'])
-      if (all['db_pool_max'])            setPoolMax(all['db_pool_max'])
-      if (all['db_pool_acquire_timeout']) setPoolTO(all['db_pool_acquire_timeout'])
-    } catch { /* DB may be starting — keep defaults */ }
+      if (all['snowflake_app_database']) setAppDb(all['snowflake_app_database'])
+      if (all['snowflake_app_schema'])   setAppSchema(all['snowflake_app_schema'])
+    } catch { /* keep defaults */ }
     finally { setLoading(false) }
   }, [])
 
@@ -430,13 +400,8 @@ function DatabaseTab({ onSaveParent }: { onSaveParent: () => Promise<void> }) {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/health`)
       const data = await res.json()
       const dbStatus: string = data?.checks?.database ?? ''
-      if (dbStatus.toLowerCase().startsWith('error') || dbStatus.toLowerCase().startsWith('ok') === false) {
-        setHealth(dbStatus.toLowerCase().includes('ok') ? 'ok' : 'error')
-        setHealthMsg(dbStatus)
-      } else {
-        setHealth('ok')
-        setHealthMsg(dbStatus)
-      }
+      setHealth(dbStatus.toLowerCase().includes('ok') ? 'ok' : 'error')
+      setHealthMsg(dbStatus)
     } catch (e: any) { setHealth('error'); setHealthMsg(e.message || 'Cannot reach API') }
   }, [])
 
@@ -445,48 +410,22 @@ function DatabaseTab({ onSaveParent }: { onSaveParent: () => Promise<void> }) {
   const handleSave = async () => {
     setSaving(true); setSaveErr('')
     try {
-      const urls = buildDbUrls(cfg.host, cfg.port, cfg.user, cfg.password, cfg.dbname)
-      const updates: Record<string, string> = {
-        database_url:      urls.database_url,
-        sync_database_url: urls.sync_database_url,
-      }
-      if (poolMin) updates['db_pool_min'] = poolMin
-      if (poolMax) updates['db_pool_max'] = poolMax
-      if (poolTO)  updates['db_pool_acquire_timeout'] = poolTO
-      await configApi.bulkUpdate(updates)
+      await configApi.bulkUpdate({ snowflake_app_database: appDb, snowflake_app_schema: appSchema })
       setSaved(true); setDirty(false)
       setTimeout(() => setSaved(false), 3000)
     } catch (e: any) { setSaveErr(e.response?.data?.detail || e.message || 'Save failed') }
     finally { setSaving(false) }
   }
 
-  const handleTest = async () => {
-    await handleSave()
-    setTestSt({ status: 'testing', message: '' })
-    try {
-      const res = await configApi.testDatabase()
-      setTestSt({ status: 'ok', message: res.data.message || 'Connected successfully' })
-      await checkHealth()
-    } catch (e: any) {
-      setTestSt({ status: 'error', message: e.response?.data?.detail || e.message || 'Connection failed' })
-      setHealth('error')
-    }
-  }
-
-  const urls = buildDbUrls(cfg.host, cfg.port, cfg.user, cfg.password, cfg.dbname)
-
-  const inputCls = 'w-full px-3 py-2 border border-gray-300 dark:border-[var(--border)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-[var(--surface)] text-gray-900 dark:text-[var(--text)] font-mono'
-
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-base font-bold text-gray-900 dark:text-[var(--text)]">Database Connection</h2>
+          <h2 className="text-base font-bold text-gray-900 dark:text-[var(--text)]">Snowflake App Database</h2>
           <p className="text-xs text-gray-500 dark:text-[var(--text-3)] mt-0.5">
-            PostgreSQL stores all platform metadata — rules, runs, alerts, and audit logs.
+            Snowflake stores all platform metadata — rules, runs, alerts, and audit logs.
           </p>
         </div>
-        {/* Live status pill */}
         <button onClick={checkHealth} className="flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-semibold transition-all hover:opacity-80"
           style={health === 'ok'
             ? { background: 'rgba(34,197,94,0.1)', borderColor: 'rgba(34,197,94,0.3)', color: '#16a34a' }
@@ -505,94 +444,50 @@ function DatabaseTab({ onSaveParent }: { onSaveParent: () => Promise<void> }) {
           <XCircle size={14} className="mt-0.5 shrink-0" />
           <div>
             <span className="font-semibold">Connection error: </span>{healthMsg}
-            <p className="text-xs mt-1 opacity-70">Make sure PostgreSQL is running and the credentials below are correct, then click Test Connection.</p>
+            <p className="text-xs mt-1 opacity-70">Check your Snowflake credentials in the Snowflake tab and ensure SNOWFLAKE_ACCOUNT / SNOWFLAKE_USER / SNOWFLAKE_PASSWORD are set.</p>
           </div>
         </div>
       )}
 
       {loading ? (
-        <div className="flex items-center justify-center py-12"><Loader2 size={22} className="animate-spin text-indigo-500" /></div>
+        <div className="flex items-center justify-center py-12"><Loader2 size={22} className="animate-spin text-blue-500" /></div>
       ) : (
         <>
-          {/* ── Connection fields ── */}
+          {/* ── App database / schema ── */}
           <div className="border border-gray-200 dark:border-[var(--border)] rounded-xl p-5 mb-5 card-accent-top">
-            <h3 className="text-sm font-semibold text-gray-800 dark:text-[var(--text-2)] mb-4">Connection Details</h3>
-            <div className="grid grid-cols-3 gap-4 mb-4">
-              <div className="col-span-2">
-                <label className="block text-xs font-medium text-gray-600 dark:text-[var(--text-3)] mb-1">Host</label>
-                <input className={inputCls} value={cfg.host} onChange={e => set('host', e.target.value)} placeholder="localhost" />
+            <h3 className="text-sm font-semibold text-gray-800 dark:text-[var(--text-2)] mb-1">Platform Tables Location</h3>
+            <p className="text-xs text-gray-400 dark:text-[var(--text-4)] mb-4">
+              The Snowflake database and schema where the platform stores its own tables (rules, runs, users, audit logs, etc.).
+              This is separate from the source data being quality-checked.
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-[var(--text-3)] mb-1">App Database</label>
+                <input className={inputCls} value={appDb} onChange={e => { setAppDb(e.target.value); setDirty(true) }} placeholder="DQ_PLATFORM_DB" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 dark:text-[var(--text-3)] mb-1">Port</label>
-                <input className={inputCls} value={cfg.port} onChange={e => set('port', e.target.value)} placeholder="5432" />
+                <label className="block text-xs font-medium text-gray-600 dark:text-[var(--text-3)] mb-1">App Schema</label>
+                <input className={inputCls} value={appSchema} onChange={e => { setAppSchema(e.target.value); setDirty(true) }} placeholder="DQ_APP" />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-600 dark:text-[var(--text-3)] mb-1">Username</label>
-                <input className={inputCls} value={cfg.user} onChange={e => set('user', e.target.value)} placeholder="dquser" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 dark:text-[var(--text-3)] mb-1">Password</label>
-                <div className="relative">
-                  <input type={showPass ? 'text' : 'password'} className={inputCls + ' pr-10'}
-                    value={cfg.password} onChange={e => set('password', e.target.value)} placeholder="dqpass" />
-                  <button type="button" onClick={() => setShowPass(s => !s)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                    {showPass ? <EyeOff size={14} /> : <Eye size={14} />}
-                  </button>
-                </div>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 dark:text-[var(--text-3)] mb-1">Database Name</label>
-              <input className={inputCls} value={cfg.dbname} onChange={e => set('dbname', e.target.value)} placeholder="dqplatform" />
-            </div>
-            {/* Auto-built URL preview */}
             <div className="mt-4 p-3 rounded-lg bg-gray-50 dark:bg-[var(--surface-sub)] border border-gray-200 dark:border-[var(--border)]">
-              <p className="text-[10px] font-semibold text-gray-400 dark:text-[var(--text-4)] uppercase tracking-wider mb-1.5">Auto-built connection URL</p>
-              <p className="text-[11px] font-mono text-gray-600 dark:text-[var(--text-3)] break-all">{urls.database_url.replace(/:([^:@]+)@/, ':●●●●@')}</p>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Full path</p>
+              <p className="text-[11px] font-mono text-gray-600 dark:text-[var(--text-3)]">{appDb}.{appSchema}.*</p>
             </div>
           </div>
 
-          {/* ── Pool settings ── */}
-          <div className="border border-gray-200 dark:border-[var(--border)] rounded-xl p-5 mb-5">
-            <h3 className="text-sm font-semibold text-gray-800 dark:text-[var(--text-2)] mb-4">Connection Pool</h3>
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-600 dark:text-[var(--text-3)] mb-1">Min connections</label>
-                <input type="number" min={1} max={10} className={inputCls} value={poolMin} onChange={e => { setPoolMin(e.target.value); setDirty(true) }} />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 dark:text-[var(--text-3)] mb-1">Max connections</label>
-                <input type="number" min={1} max={50} className={inputCls} value={poolMax} onChange={e => { setPoolMax(e.target.value); setDirty(true) }} />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 dark:text-[var(--text-3)] mb-1">Acquire timeout (s)</label>
-                <input type="number" min={5} max={120} className={inputCls} value={poolTO} onChange={e => { setPoolTO(e.target.value); setDirty(true) }} />
-              </div>
-            </div>
-            <p className="text-xs text-gray-400 dark:text-[var(--text-4)] mt-2">Pool changes take effect on next API restart.</p>
-          </div>
-
-          {/* ── Docker quick-connect ── */}
-          <div className="border border-indigo-100 dark:border-indigo-500/15 bg-indigo-50/50 dark:bg-indigo-500/5 rounded-xl p-4 mb-5">
+          {/* ── Info callout ── */}
+          <div className="border border-blue-100 dark:border-blue-500/15 bg-blue-50/50 dark:bg-blue-500/5 rounded-xl p-4 mb-5">
             <div className="flex items-center gap-2 mb-2">
-              <Wifi size={13} className="text-indigo-500" />
-              <span className="text-xs font-semibold text-indigo-700 dark:text-indigo-300">Docker Compose defaults</span>
+              <Info size={13} className="text-blue-500" />
+              <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">Snowflake credentials</span>
             </div>
-            <p className="text-xs text-indigo-600 dark:text-indigo-400 mb-2">If running via <code className="bg-indigo-100 dark:bg-indigo-500/15 px-1 rounded">docker compose up</code>, use these values:</p>
-            <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs font-mono text-indigo-700 dark:text-indigo-300">
-              <span>Host: <strong>postgres</strong></span>
-              <span>Port: <strong>5432</strong></span>
-              <span>User: <strong>dquser</strong></span>
-              <span>Pass: <strong>dqpass</strong></span>
-              <span>DB: <strong>dqplatform</strong></span>
-            </div>
-            <button type="button" onClick={() => { setCfg({ host: 'postgres', port: '5432', user: 'dquser', password: 'dqpass', dbname: 'dqplatform' }); setDirty(true) }}
-              className="mt-3 text-xs px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 font-medium">
-              Apply Docker defaults
-            </button>
+            <p className="text-xs text-blue-600 dark:text-blue-400">
+              Account, user, password, warehouse, and role are configured via environment variables
+              (<code className="bg-blue-100 dark:bg-blue-500/15 px-1 rounded">SNOWFLAKE_ACCOUNT</code>,{' '}
+              <code className="bg-blue-100 dark:bg-blue-500/15 px-1 rounded">SNOWFLAKE_USER</code>, etc.).
+              Add data source connections in the <strong>Snowflake</strong> tab.
+            </p>
           </div>
 
           {/* ── Buttons ── */}
@@ -608,18 +503,12 @@ function DatabaseTab({ onSaveParent }: { onSaveParent: () => Promise<void> }) {
               {saving ? 'Saving…' : 'Save Changes'}
             </button>
             {saved && <span className="flex items-center gap-1 text-sm text-green-600"><CheckCircle size={14} /> Saved</span>}
-            <button onClick={handleTest} disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-[var(--border)] text-gray-700 dark:text-[var(--text-2)] rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-[var(--surface-sub)]">
-              <RefreshCw size={13} /> Test Connection
-            </button>
           </div>
-
-          <TestBanner status={testSt} />
 
           {dirty && (
             <div className="flex items-center gap-2 mt-3 px-3 py-2.5 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-lg text-xs text-amber-700 dark:text-amber-300">
               <AlertTriangle size={12} className="shrink-0" />
-              Connection URL changes require an API server restart to take effect.
+              Database/schema changes require an API server restart to take effect.
             </div>
           )}
         </>

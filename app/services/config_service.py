@@ -18,7 +18,11 @@ CONFIG_DEFAULTS: list[dict] = [
     {"category": "general", "key": "debug", "value": "true", "is_secret": False, "description": "Enable verbose SQL query logging (true/false)"},
     {"category": "general", "key": "display_timezone", "value": "America/Los_Angeles", "is_secret": False, "description": "Timezone used to display all timestamps across the UI"},
 
-    # Snowflake app database (platform tables)
+    # Snowflake — app database (platform tables)
+    {"category": "database", "key": "snowflake_app_database", "value": "DQ_PLATFORM_DB", "is_secret": False, "description": "Snowflake database where platform tables (rules, runs, users, etc.) are stored"},
+    {"category": "database", "key": "snowflake_app_schema",   "value": "DQ_APP",          "is_secret": False, "description": "Snowflake schema within the app database"},
+
+    # Snowflake — source data connections
     {"category": "snowflake", "key": "snowflake_account", "value": "", "is_secret": False, "description": "Snowflake account identifier (e.g. myorg-myaccount)"},
     {"category": "snowflake", "key": "snowflake_user", "value": "", "is_secret": False, "description": "Snowflake service account username"},
     {"category": "snowflake", "key": "snowflake_password", "value": "", "is_secret": True, "description": "Snowflake service account password"},
