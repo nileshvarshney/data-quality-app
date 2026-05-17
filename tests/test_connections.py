@@ -110,3 +110,60 @@ def test_platform_info_returns_expected_keys():
     assert "app_schema" in result
     assert "has_password" in result
     assert "password" not in result
+
+
+import pytest
+from unittest.mock import AsyncMock
+from app.services.execution_service import _resolve_executor
+
+
+@pytest.mark.asyncio
+async def test_resolve_executor_uses_primary_target_as_fallback():
+    """When asset has no connection and no named connections exist,
+    _resolve_executor must use the primary target connection."""
+    asset = MagicMock()
+    asset.connection_id = None
+    asset.sf_table_name = "test_table"
+
+    primary_conn = MagicMock()
+    primary_conn.connection_id = "primary-123"
+    primary_conn.connection_name = "Primary Target"
+    primary_conn.password = "enc_pass"
+
+    call_count = 0
+
+    async def mock_execute(stmt):
+        nonlocal call_count
+        call_count += 1
+        result = MagicMock()
+        if call_count == 1:
+            result.scalars.return_value.all.return_value = []
+        elif call_count == 2:
+            result.scalar_one_or_none.return_value = primary_conn
+        return result
+
+    db = AsyncMock()
+    db.execute = mock_execute
+
+    executor = await _resolve_executor(asset, db)
+    assert executor is not None
+
+
+@pytest.mark.asyncio
+async def test_resolve_executor_raises_when_no_target():
+    """When no connections exist and no primary target, raise RuntimeError."""
+    asset = MagicMock()
+    asset.connection_id = None
+    asset.sf_table_name = "test_table"
+
+    async def mock_execute(stmt):
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = []
+        result.scalar_one_or_none.return_value = None
+        return result
+
+    db = AsyncMock()
+    db.execute = mock_execute
+
+    with pytest.raises(RuntimeError, match="Settings.*Target Database"):
+        await _resolve_executor(asset, db)
