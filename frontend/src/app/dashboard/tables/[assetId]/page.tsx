@@ -1,19 +1,22 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   Shield, CheckCircle, XCircle, Activity, Clock,
   ChevronRight, RefreshCw, Play, AlertTriangle, Loader2,
   FileText, Bot, Database, GitBranch,
-  Columns, Star, Tag, BookOpen, Zap, Pencil,
+  Columns, Star, Tag, BookOpen, Zap, Pencil, EyeOff, TrendingUp,
 } from 'lucide-react'
 import { dashboardApi, executionsApi, aiApi, assetsApi, glossaryApi } from '@/services/apiClient'
+import { profilingApi } from '@/services/profilingApi'
 import QualityTrendChart from '@/components/charts/QualityTrendChart'
+import ProfileTrendsTab from '@/components/profiling/ProfileTrendsTab'
 import ScoreRing from '@/components/common/ScoreRing'
 import SeverityBadge, { StatusBadge } from '@/components/common/SeverityBadge'
 import CertificationBadge from '@/components/common/CertificationBadge'
 import Breadcrumbs from '@/components/common/Breadcrumbs'
+import Tooltip from '@/components/common/Tooltip'
 import MetricInfo, { METRICS } from '@/components/common/MetricInfo'
 import { useTheme } from '@/components/layout/ThemeProvider'
 import { useTimezone } from '@/contexts/TimezoneContext'
@@ -48,9 +51,55 @@ function scoreBadgeClass(s: number) {
 }
 function relTime(iso: string) {
   const d = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
-  if (d < 60) return `${d}s ago`; if (d < 3600) return `${Math.floor(d/60)}m ago`
-  if (d < 86400) return `${Math.floor(d/3600)}h ago`; return `${Math.floor(d/86400)}d ago`
+  if (d < 60) return `${d}s ago`
+  if (d < 3600) return `${Math.floor(d / 60)} min ago`
+  if (d < 86400) { const h = Math.floor(d / 3600); return `${h} hr${h > 1 ? 's' : ''} ago` }
+  const days = Math.floor(d / 86400); return `${days} day${days > 1 ? 's' : ''} ago`
 }
+function isNumericType(dt: string | null | undefined): boolean {
+  if (!dt) return false
+  const up = dt.toUpperCase()
+  return ['NUMBER','INT','FLOAT','DECIMAL','DOUBLE','REAL','NUMERIC',
+          'BIGINT','SMALLINT','TINYINT','BYTEINT'].some(t => up.includes(t))
+}
+function isTextType(dt: string | null | undefined): boolean {
+  if (!dt) return false
+  const up = dt.toUpperCase()
+  return ['VARCHAR','CHAR','STRING','TEXT','NCHAR','NVARCHAR'].some(t => up.includes(t))
+}
+const CLASSIFICATION_COLORS: Record<string, string> = {
+  PII: 'bg-red-100 text-red-700', SENSITIVE: 'bg-orange-100 text-orange-700',
+  CONFIDENTIAL: 'bg-yellow-100 text-yellow-700', RESTRICTED: 'bg-purple-100 text-purple-700',
+  PUBLIC: 'bg-green-100 text-green-700',
+}
+const CLASSIFICATION_LABELS: Record<string, string> = {
+  PII: 'PII', SENSITIVE: 'Sensitive', CONFIDENTIAL: 'Confidential',
+  RESTRICTED: 'Restricted', PUBLIC: 'Public',
+}
+const CLASSIFICATION_TOOLTIPS: Record<string, { title: string; desc: string; examples: string }> = {
+  PII:          { title: 'Personally Identifiable Information', desc: 'Data that can directly identify a specific individual. Subject to GDPR, CCPA, and other privacy regulations.', examples: 'Name, email, SSN, date of birth, phone number, IP address' },
+  SENSITIVE:    { title: 'Sensitive Business Data', desc: 'Business-sensitive information that could cause harm if disclosed. Access is restricted by role.', examples: 'Revenue figures, salary, pricing strategies, contracts' },
+  CONFIDENTIAL: { title: 'Confidential — Internal Use Only', desc: 'Data intended for internal stakeholders only. Must not be shared externally without approval.', examples: 'Internal reports, org charts, hiring pipelines' },
+  RESTRICTED:   { title: 'Restricted — Highly Controlled', desc: 'The most sensitive category. Access requires explicit approval. Often subject to legal holds or M&A confidentiality.', examples: 'M&A deal data, legal hold records, board materials' },
+  PUBLIC:       { title: 'Public — Freely Shareable', desc: 'No access restrictions. Safe to share externally and use in public-facing products.', examples: 'Published datasets, reference lookup tables, marketing copy' },
+}
+const SHOULD_MASK = new Set(['PII', 'SENSITIVE', 'CONFIDENTIAL', 'RESTRICTED'])
+
+// Schema tab column header definitions — label + optional MetricInfo key
+const SCHEMA_HEADERS: { label: string; metricKey?: string }[] = [
+  { label: 'Column' },
+  { label: 'Type',        metricKey: 'schemaDataType' },
+  { label: 'Nullable',    metricKey: 'schemaNullable' },
+  { label: 'Null %',      metricKey: 'nullPct' },
+  { label: 'Distinct',    metricKey: 'distinctCount' },
+  { label: 'Cardinality', metricKey: 'cardinality' },
+  { label: 'Min',         metricKey: 'minValue' },
+  { label: 'Max',         metricKey: 'maxValue' },
+  { label: 'Mean',        metricKey: 'mean' },
+  { label: 'Std Dev',     metricKey: 'stdDev' },
+  { label: 'Top Values',  metricKey: 'topValues' },
+  { label: 'Description', metricKey: 'colDescription' },
+]
 
 // ── Sample records panel ──────────────────────────────────────────
 
@@ -157,7 +206,8 @@ export default function TableDashboardPage() {
   const [expandedRun, setExpandedRun] = useState<string | null>(null)
 
   // Tabs
-  const [activeTab, setActiveTab] = useState<'quality' | 'schema' | 'lineage'>('quality')
+  const [activeTab, setActiveTab] = useState<'quality' | 'schema' | 'lineage' | 'trends'>('quality')
+  const [driftCount, setDriftCount] = useState(0)
   const [columns, setColumns]   = useState<any[]>([])
   const [colLoading, setColLoading] = useState(false)
   const [colFetched, setColFetched] = useState(false)
@@ -170,6 +220,15 @@ export default function TableDashboardPage() {
 
   const [glossaryTerms, setGlossaryTerms] = useState<any[]>([])
 
+  const tableLastProfiledAt = useMemo(
+    () => columns
+      .map((c: any) => c.last_profiled_at)
+      .filter(Boolean)
+      .sort()
+      .at(-1) ?? null,
+    [columns]
+  )
+
   const loadAll = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true)
     try {
@@ -180,6 +239,13 @@ export default function TableDashboardPage() {
   }, [assetId])
 
   useEffect(() => { loadAll() }, [loadAll])
+
+  // Fetch drift summary in background to populate tab badge
+  useEffect(() => {
+    profilingApi.getSummary(assetId)
+      .then(data => setDriftCount(data.filter(s => s.drift_detected).length))
+      .catch(() => {})
+  }, [assetId])
 
   // Lazy-load schema when tab first opened
   useEffect(() => {
@@ -296,7 +362,15 @@ export default function TableDashboardPage() {
           </div>
           <p className="text-sm text-gray-500">
             {data.owner_name && <span>{data.owner_name} · </span>}
-            Last run: {data.last_run_time ? formatTs(data.last_run_time) : 'Never'}
+            {(() => {
+              const ts = data.last_run_time
+                ?? (data.rules || [])
+                     .map((r: any) => r.last_run)
+                     .filter(Boolean)
+                     .sort()
+                     .at(-1)
+              return ts ? <>Last run: {formatTs(ts)}</> : <span className="text-gray-400">No runs yet</span>
+            })()}
           </p>
         </div>
         <div className="flex items-center gap-2.5 flex-wrap">
@@ -320,9 +394,10 @@ export default function TableDashboardPage() {
       {/* Tab navigation */}
       <div className="flex gap-1 border-b border-gray-200">
         {([
-          { id: 'quality',  label: 'Quality',  icon: <Shield size={14} /> },
-          { id: 'schema',   label: 'Schema',   icon: <Columns size={14} /> },
-          { id: 'lineage',  label: 'Lineage',  icon: <GitBranch size={14} /> },
+          { id: 'quality',  label: 'Quality',         icon: <Shield size={14} /> },
+          { id: 'schema',   label: 'Schema',           icon: <Columns size={14} /> },
+          { id: 'lineage',  label: 'Lineage',          icon: <GitBranch size={14} /> },
+          { id: 'trends',   label: 'Profile Trends',   icon: <TrendingUp size={14} /> },
         ] as const).map(tab => (
           <button
             key={tab.id}
@@ -334,6 +409,11 @@ export default function TableDashboardPage() {
             }`}
           >
             {tab.icon}{tab.label}
+            {tab.id === 'trends' && driftCount > 0 && (
+              <span className="ml-1 flex items-center justify-center w-4 h-4 text-[9px] font-bold bg-red-500 text-white rounded-full">
+                {driftCount}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -544,6 +624,12 @@ export default function TableDashboardPage() {
               <Columns size={15} className="text-gray-500 dark:text-[var(--text-3)]" />
               <h3 className="text-sm font-semibold text-gray-900 dark:text-[var(--text)]">Column Metadata</h3>
               {columns.length > 0 && <span className="text-xs text-gray-400 dark:text-[var(--text-4)]">{columns.length} columns</span>}
+              {tableLastProfiledAt && (
+                <span className="flex items-center gap-1 text-[11px] text-gray-400 dark:text-[var(--text-4)]">
+                  <Clock size={10} />
+                  Last profiled: {formatTs(tableLastProfiledAt)}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2">
               {profilingStatus === 'done' && (
@@ -552,19 +638,45 @@ export default function TableDashboardPage() {
                 </span>
               )}
               {profilingStatus === 'error' && (
-                <span className="text-xs text-red-500" title={profilingError}>
-                  Profile failed{profilingError ? ` — ${profilingError.slice(0, 60)}${profilingError.length > 60 ? '…' : ''}` : ''}
-                </span>
+                <Tooltip
+                  position="left"
+                  maxWidth={320}
+                  content={
+                    <div className="space-y-1">
+                      <p className="font-semibold text-red-300 text-[11px]">Profiling Failed</p>
+                      <p className="text-gray-300 text-[10px] leading-relaxed">{profilingError || 'An unknown error occurred during column profiling.'}</p>
+                      <p className="text-yellow-300 text-[10px]">💡 Check Snowflake connectivity and warehouse availability in Settings.</p>
+                    </div>
+                  }
+                >
+                  <span className="text-xs text-red-500 cursor-help border-b border-dashed border-red-400">
+                    Profile failed{profilingError ? ` — ${profilingError.slice(0, 50)}${profilingError.length > 50 ? '…' : ''}` : ''}
+                  </span>
+                </Tooltip>
               )}
-              <button
-                onClick={triggerProfiling}
-                disabled={profilingStatus === 'running'}
-                className="flex items-center gap-1.5 px-3 py-1.5 btn-gradient rounded-lg text-xs font-semibold disabled:opacity-50"
+              <Tooltip
+                position="left"
+                maxWidth={300}
+                content={
+                  <div className="space-y-1.5">
+                    <p className="font-semibold text-white text-[11px]">Profile Columns</p>
+                    <p className="text-gray-300 text-[10px] leading-relaxed">
+                      Runs a Snowflake query to compute per-column statistics: null rate, distinct count, cardinality, min, max, mean, std dev, and top values.
+                    </p>
+                    <p className="text-yellow-300 text-[10px]">💡 Uses the DQ_SMALL_WH warehouse. Results persist until the next profile run.</p>
+                  </div>
+                }
               >
-                {profilingStatus === 'running'
-                  ? <><Loader2 size={11} className="animate-spin" /> Profiling…</>
-                  : <><Zap size={11} /> Profile Columns</>}
-              </button>
+                <button
+                  onClick={triggerProfiling}
+                  disabled={profilingStatus === 'running'}
+                  className="flex items-center gap-1.5 px-3 py-1.5 btn-gradient rounded-lg text-xs font-semibold disabled:opacity-50"
+                >
+                  {profilingStatus === 'running'
+                    ? <><Loader2 size={11} className="animate-spin" /> Profiling…</>
+                    : <><Zap size={11} /> Profile Columns</>}
+                </button>
+              </Tooltip>
             </div>
           </div>
           {colLoading ? (
@@ -584,8 +696,15 @@ export default function TableDashboardPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 dark:bg-[var(--surface-sub)] border-b border-gray-100 dark:border-[var(--border)]">
                   <tr>
-                    {['Column','Type','Nullable','Null %','Distinct','Cardinality','Min','Max','Mean','Std Dev','Top Values','Samples','Last Profiled','Description'].map(h => (
-                      <th key={h} className="text-left px-3 py-2.5 text-[10px] font-semibold text-gray-400 dark:text-[var(--text-4)] uppercase tracking-widest whitespace-nowrap">{h}</th>
+                    {SCHEMA_HEADERS.map(({ label, metricKey }) => (
+                      <th key={label} className="text-left px-3 py-2.5 text-[10px] font-semibold text-gray-400 dark:text-[var(--text-4)] uppercase tracking-widest whitespace-nowrap">
+                        <div className="flex items-center gap-1">
+                          {label}
+                          {metricKey && METRICS[metricKey] && (
+                            <MetricInfo metric={METRICS[metricKey]} position="bottom" size={10} />
+                          )}
+                        </div>
+                      </th>
                     ))}
                   </tr>
                 </thead>
@@ -594,9 +713,45 @@ export default function TableDashboardPage() {
                     <tr key={col.column_name} className="hover:bg-gray-50 dark:hover:bg-[var(--surface-sub)] transition-colors">
                       {/* Column name */}
                       <td className="px-3 py-2.5">
-                        <div className="flex items-center gap-1.5">
-                          {col.is_primary_key && <span title="Primary key" className="w-4 h-4 rounded bg-yellow-100 dark:bg-yellow-500/15 text-yellow-600 dark:text-yellow-400 flex items-center justify-center text-[9px] font-bold">PK</span>}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {col.is_primary_key && (
+                            <Tooltip
+                              position="top"
+                              content={
+                                <div className="space-y-1">
+                                  <p className="font-semibold text-yellow-300 text-[11px]">Primary Key</p>
+                                  <p className="text-gray-300 text-[10px]">This column uniquely identifies each row in the table.</p>
+                                  <p className="text-yellow-300 text-[10px]">💡 Consider adding a uniqueness_check rule to detect duplicates.</p>
+                                </div>
+                              }
+                            >
+                              <span className="w-4 h-4 rounded bg-yellow-100 dark:bg-yellow-500/15 text-yellow-600 dark:text-yellow-400 flex items-center justify-center text-[9px] font-bold cursor-help">PK</span>
+                            </Tooltip>
+                          )}
                           <span className="text-xs font-semibold text-gray-900 dark:text-[var(--text)] font-mono">{col.column_name}</span>
+                          {col.classification && (() => {
+                            const tip = CLASSIFICATION_TOOLTIPS[col.classification]
+                            return (
+                              <Tooltip
+                                position="top"
+                                maxWidth={300}
+                                content={tip
+                                  ? <div className="space-y-1.5">
+                                      <p className="font-semibold text-white text-[11px]">{tip.title}</p>
+                                      <p className="text-gray-300 text-[10px] leading-relaxed">{tip.desc}</p>
+                                      <div className="border-t border-gray-700 pt-1">
+                                        <p className="text-gray-400 text-[10px]">Examples: {tip.examples}</p>
+                                      </div>
+                                    </div>
+                                  : CLASSIFICATION_LABELS[col.classification] ?? col.classification
+                                }
+                              >
+                                <span className={`text-[9px] px-1 py-0.5 rounded font-semibold uppercase tracking-wide cursor-help ${CLASSIFICATION_COLORS[col.classification] ?? 'bg-gray-100 text-gray-600'}`}>
+                                  {CLASSIFICATION_LABELS[col.classification] ?? col.classification}
+                                </span>
+                              </Tooltip>
+                            )
+                          })()}
                         </div>
                       </td>
                       {/* Type */}
@@ -606,7 +761,20 @@ export default function TableDashboardPage() {
                       {/* Null % — orange if > 10% */}
                       <td className="px-3 py-2.5">
                         {col.null_pct != null
-                          ? <span className={`text-xs font-semibold ${col.null_pct > 10 ? 'text-orange-500' : 'text-gray-500 dark:text-[var(--text-3)]'}`}>{col.null_pct.toFixed(1)}%</span>
+                          ? col.null_pct > 10
+                            ? <Tooltip
+                                position="top"
+                                content={
+                                  <div className="space-y-1">
+                                    <p className="font-semibold text-orange-300 text-[11px]">High Null Rate</p>
+                                    <p className="text-gray-300 text-[10px]">{col.null_pct.toFixed(1)}% of rows are NULL — above the 10% warning threshold.</p>
+                                    <p className="text-yellow-300 text-[10px]">💡 Consider adding a null_check rule to alert on missing values.</p>
+                                  </div>
+                                }
+                              >
+                                <span className="text-xs font-semibold text-orange-500 cursor-help border-b border-dashed border-orange-400">{col.null_pct.toFixed(1)}%</span>
+                              </Tooltip>
+                            : <span className="text-xs font-semibold text-gray-500 dark:text-[var(--text-3)]">{col.null_pct.toFixed(1)}%</span>
                           : <span className="text-gray-300 dark:text-[var(--text-4)] text-xs">—</span>}
                       </td>
                       {/* Distinct count */}
@@ -614,53 +782,103 @@ export default function TableDashboardPage() {
                       {/* Cardinality — amber if < 5% (low cardinality, good for accepted_values rule) */}
                       <td className="px-3 py-2.5">
                         {col.cardinality_pct != null
-                          ? <span className={`text-xs font-medium ${col.cardinality_pct < 5 ? 'text-amber-500' : 'text-gray-500 dark:text-[var(--text-3)]'}`} title={col.cardinality_pct < 5 ? 'Low cardinality — consider an accepted_values rule' : undefined}>
-                              {col.cardinality_pct.toFixed(1)}%
-                            </span>
+                          ? col.cardinality_pct < 5
+                            ? <Tooltip
+                                position="top"
+                                content={
+                                  <div className="space-y-1">
+                                    <p className="font-semibold text-amber-300 text-[11px]">Low Cardinality</p>
+                                    <p className="text-gray-300 text-[10px]">Only {col.cardinality_pct.toFixed(1)}% of values are unique — this column has a small fixed set of values.</p>
+                                    <p className="text-yellow-300 text-[10px]">💡 Strong candidate for an accepted_values rule to lock in the allowed set.</p>
+                                  </div>
+                                }
+                              >
+                                <span className="text-xs font-medium text-amber-500 cursor-help border-b border-dashed border-amber-400">{col.cardinality_pct.toFixed(1)}%</span>
+                              </Tooltip>
+                            : <span className="text-xs font-medium text-gray-500 dark:text-[var(--text-3)]">{col.cardinality_pct.toFixed(1)}%</span>
                           : <span className="text-gray-300 dark:text-[var(--text-4)] text-xs">—</span>}
                       </td>
-                      {/* Min */}
-                      <td className="px-3 py-2.5 text-xs text-gray-500 dark:text-[var(--text-3)] font-mono max-w-[80px] truncate" title={col.min_value ?? ''}>{col.min_value ?? '—'}</td>
-                      {/* Max */}
-                      <td className="px-3 py-2.5 text-xs text-gray-500 dark:text-[var(--text-3)] font-mono max-w-[80px] truncate" title={col.max_value ?? ''}>{col.max_value ?? '—'}</td>
-                      {/* Mean */}
-                      <td className="px-3 py-2.5 text-xs text-gray-500 dark:text-[var(--text-3)]">{col.mean != null ? col.mean.toFixed(2) : '—'}</td>
-                      {/* Std Dev */}
-                      <td className="px-3 py-2.5 text-xs text-gray-500 dark:text-[var(--text-3)]">{col.std_dev != null ? col.std_dev.toFixed(2) : '—'}</td>
-                      {/* Top Values — show top 3 inline, rest in title tooltip */}
-                      <td className="px-3 py-2.5 max-w-[120px]">
-                        {Array.isArray(col.top_values) && col.top_values.length > 0 ? (
-                          <span className="text-[10px] text-gray-500 dark:text-[var(--text-3)]" title={col.top_values.map((v: any) => `${v.value} (${v.count})`).join(', ')}>
-                            {col.top_values.slice(0, 3).map((v: any) => v.value).join(', ')}
-                            {col.top_values.length > 3 && <span className="text-gray-400"> +{col.top_values.length - 3}</span>}
-                          </span>
-                        ) : <span className="text-gray-300 dark:text-[var(--text-4)] text-xs">—</span>}
+                      {/* Min — hidden for text types (alphabetical min is not meaningful) */}
+                      <td className="px-3 py-2.5 max-w-[80px] overflow-hidden">
+                        {isTextType(col.data_type)
+                          ? <span className="text-gray-300 dark:text-[var(--text-4)] text-xs">—</span>
+                          : col.min_value != null
+                            ? <Tooltip
+                                text={`Min: ${col.min_value}`}
+                                position="top"
+                                className="block w-full overflow-hidden"
+                              >
+                                <span className="text-xs text-gray-500 dark:text-[var(--text-3)] font-mono block truncate cursor-default">{col.min_value}</span>
+                              </Tooltip>
+                            : <span className="text-gray-300 dark:text-[var(--text-4)] text-xs">—</span>}
                       </td>
-                      {/* Sample Values */}
-                      <td className="px-3 py-2.5 max-w-[120px]">
-                        {Array.isArray(col.sample_values) && col.sample_values.length > 0 ? (
-                          <span className="text-[10px] text-gray-400 dark:text-[var(--text-4)] font-mono" title={col.sample_values.join(', ')}>
-                            {col.sample_values.slice(0, 2).join(', ')}
-                            {col.sample_values.length > 2 && <span> +{col.sample_values.length - 2}</span>}
-                          </span>
-                        ) : <span className="text-gray-300 dark:text-[var(--text-4)] text-xs">—</span>}
+                      {/* Max — hidden for text types */}
+                      <td className="px-3 py-2.5 max-w-[80px] overflow-hidden">
+                        {isTextType(col.data_type)
+                          ? <span className="text-gray-300 dark:text-[var(--text-4)] text-xs">—</span>
+                          : col.max_value != null
+                            ? <Tooltip
+                                text={`Max: ${col.max_value}`}
+                                position="top"
+                                className="block w-full overflow-hidden"
+                              >
+                                <span className="text-xs text-gray-500 dark:text-[var(--text-3)] font-mono block truncate cursor-default">{col.max_value}</span>
+                              </Tooltip>
+                            : <span className="text-gray-300 dark:text-[var(--text-4)] text-xs">—</span>}
                       </td>
-                      {/* Last Profiled */}
-                      <td className="px-3 py-2.5 text-[10px] text-gray-400 dark:text-[var(--text-4)] whitespace-nowrap">
-                        {col.last_profiled_at
-                          ? (() => {
-                              const d = new Date(col.last_profiled_at)
-                              const diff = Math.floor((Date.now() - d.getTime()) / 1000)
-                              if (diff < 60) return `${diff}s ago`
-                              if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
-                              if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
-                              return `${Math.floor(diff / 86400)}d ago`
-                            })()
-                          : '—'}
+                      {/* Mean — numeric only */}
+                      <td className="px-3 py-2.5 text-xs text-gray-500 dark:text-[var(--text-3)]">
+                        {isNumericType(col.data_type) && col.mean != null
+                          ? col.mean.toFixed(2)
+                          : <span className="text-gray-300 dark:text-[var(--text-4)]">—</span>}
                       </td>
-                      {/* Description */}
-                      <td className="px-3 py-2.5 text-xs text-gray-500 dark:text-[var(--text-3)] max-w-[180px]">
-                        {col.description || <span className="text-gray-300 dark:text-[var(--text-4)] italic">No description</span>}
+                      {/* Std Dev — numeric only */}
+                      <td className="px-3 py-2.5 text-xs text-gray-500 dark:text-[var(--text-3)]">
+                        {isNumericType(col.data_type) && col.std_dev != null
+                          ? col.std_dev.toFixed(2)
+                          : <span className="text-gray-300 dark:text-[var(--text-4)]">—</span>}
+                      </td>
+                      {/* Top Values — masked for PII/SENSITIVE/CONFIDENTIAL/RESTRICTED */}
+                      <td className="px-3 py-2.5 max-w-[140px] overflow-hidden">
+                        {SHOULD_MASK.has(col.classification)
+                          ? <span className="flex items-center gap-1 text-xs text-gray-400 italic">
+                              <EyeOff size={10} />
+                              Masked ({CLASSIFICATION_LABELS[col.classification] ?? col.classification})
+                            </span>
+                          : Array.isArray(col.top_values) && col.top_values.length > 0
+                            ? <Tooltip
+                                position="bottom"
+                                maxWidth={280}
+                                className="block w-full overflow-hidden"
+                                content={
+                                  <div className="space-y-0.5">
+                                    {col.top_values.map((v: any, i: number) => (
+                                      <div key={i} className="flex items-center justify-between gap-3">
+                                        <span className="font-mono truncate max-w-[160px]">{String(v.value)}</span>
+                                        <span className="text-gray-400 shrink-0">{Number(v.count).toLocaleString()}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                }
+                              >
+                                <span className="text-xs text-gray-500 dark:text-[var(--text-3)] whitespace-nowrap block truncate cursor-default">
+                                  {col.top_values.slice(0, 2).map((v: any) => v.value).join(', ')}
+                                  {col.top_values.length > 2 && <span className="text-gray-400"> +{col.top_values.length - 2}</span>}
+                                </span>
+                              </Tooltip>
+                            : <span className="text-gray-300 dark:text-[var(--text-4)] text-xs">—</span>}
+                      </td>
+                      {/* Description — tooltip shows full text when truncated */}
+                      <td className="px-3 py-2.5 max-w-[180px]">
+                        {col.description
+                          ? <Tooltip
+                              text={col.description}
+                              position="left"
+                              maxWidth={320}
+                            >
+                              <span className="text-xs text-gray-500 dark:text-[var(--text-3)] line-clamp-2 cursor-default leading-relaxed">{col.description}</span>
+                            </Tooltip>
+                          : <span className="text-gray-300 dark:text-[var(--text-4)] italic text-xs">No description</span>}
                       </td>
                     </tr>
                   ))}
@@ -720,6 +938,18 @@ export default function TableDashboardPage() {
         </div>
       )}
 
+      {/* ── Profile Trends tab ──────────────────────────────────── */}
+      {activeTab === 'trends' && (
+        <div className="bg-white dark:bg-[var(--surface)] rounded-xl border border-gray-200 dark:border-[var(--border)] p-6">
+          <div className="flex items-center gap-2 mb-5">
+            <TrendingUp size={15} className="text-indigo-500" />
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-[var(--text)]">Profile Trends</h3>
+            <span className="text-xs text-gray-400 dark:text-[var(--text-4)]">Column statistics over time · drift detection</span>
+          </div>
+          <ProfileTrendsTab assetId={assetId} />
+        </div>
+      )}
+
       {/* ── Lineage tab ─────────────────────────────────────────── */}
       {activeTab === 'lineage' && (
         <div className="space-y-4">
@@ -761,7 +991,7 @@ export default function TableDashboardPage() {
             </div>
           </div>
 
-          <LineageGraph assetId={assetId} />
+          <LineageGraph objectId={assetId} />
         </div>
       )}
     </div>
