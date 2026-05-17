@@ -1,3 +1,4 @@
+import asyncio
 import re
 import uuid
 import logging
@@ -43,6 +44,8 @@ class ConnectionCreate(BaseModel):
     default_schema: str | None = None
     description: str | None = None
     is_active: bool = True
+    connection_type: str = "named"
+    is_primary_target: bool = False
 
 
 class ConnectionUpdate(BaseModel):
@@ -56,6 +59,8 @@ class ConnectionUpdate(BaseModel):
     default_schema: str | None = None
     description: str | None = None
     is_active: bool | None = None
+    connection_type: str | None = None
+    is_primary_target: bool | None = None
 
 
 def _mask(conn: SnowflakeConnection) -> dict:
@@ -72,6 +77,8 @@ def _mask(conn: SnowflakeConnection) -> dict:
         "default_schema": conn.default_schema,
         "description": conn.description,
         "is_active": conn.is_active,
+        "connection_type": conn.connection_type,
+        "is_primary_target": conn.is_primary_target,
         "created_at": conn.created_at.isoformat(),
         "updated_at": conn.updated_at.isoformat(),
     }
@@ -121,6 +128,23 @@ async def list_connections(
         select(SnowflakeConnection).order_by(SnowflakeConnection.connection_name)
     )
     return [_mask(c) for c in result.scalars().all()]
+
+
+# ── Primary Target ────────────────────────────────────────────────────────────
+
+@router.get("/primary-target")
+async def get_primary_target(
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Return the connection designated as primary target, or 404 if none set."""
+    result = await db.execute(
+        select(SnowflakeConnection).where(SnowflakeConnection.is_primary_target == True)
+    )
+    conn = result.scalar_one_or_none()
+    if not conn:
+        raise HTTPException(404, "No primary target connection configured")
+    return _mask(conn)
 
 
 @router.get("/{connection_id}")
@@ -180,6 +204,36 @@ async def delete_connection(
     return {"message": "Connection deleted"}
 
 
+@router.put("/{connection_id}/set-primary-target")
+async def set_primary_target(
+    connection_id: str,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Designate one connection as the primary target; clears the flag on all others."""
+    result = await db.execute(
+        select(SnowflakeConnection).where(SnowflakeConnection.connection_id == connection_id)
+    )
+    conn = result.scalar_one_or_none()
+    if not conn:
+        raise HTTPException(404, "Connection not found")
+
+    # Clear existing primary target
+    existing = await db.execute(
+        select(SnowflakeConnection).where(SnowflakeConnection.is_primary_target == True)
+    )
+    for old in existing.scalars().all():
+        old.is_primary_target = False
+        old.connection_type = "named"
+
+    conn.is_primary_target = True
+    conn.connection_type = "target"
+    conn.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    await db.commit()
+    await db.refresh(conn)
+    return _mask(conn)
+
+
 # ── Test ──────────────────────────────────────────────────────────────────────
 
 @router.post("/{connection_id}/test")
@@ -192,16 +246,20 @@ async def test_connection(connection_id: str, db: AsyncSession = Depends(get_db)
         raise HTTPException(404, "Connection not found")
     if not conn.password:
         return {"status": "error", "message": "No password saved for this connection"}
-    try:
+    def _run():
         sf = _open_connector(conn)
         cur = sf.cursor()
         cur.execute("SELECT CURRENT_VERSION(), CURRENT_ROLE(), CURRENT_WAREHOUSE()")
         row = cur.fetchone()
         cur.close()
         sf.close()
+        return row
+
+    try:
+        row = await asyncio.to_thread(_run)
         return {
             "status": "ok",
-            "message": f"Connected successfully",
+            "message": "Connected successfully",
             "snowflake_version": row[0],
             "role": row[1],
             "warehouse": row[2],
@@ -225,7 +283,8 @@ async def _get_conn_or_404(connection_id: str, db: AsyncSession) -> SnowflakeCon
 @router.get("/{connection_id}/databases")
 async def browse_databases(connection_id: str, db: AsyncSession = Depends(get_db)):
     conn = await _get_conn_or_404(connection_id, db)
-    try:
+
+    def _run():
         sf = _open_connector(conn)
         cur = sf.cursor()
         cur.execute("SHOW DATABASES")
@@ -233,7 +292,10 @@ async def browse_databases(connection_id: str, db: AsyncSession = Depends(get_db
         col_names = [d[0].lower() for d in cur.description]
         cur.close()
         sf.close()
-        dbs = [dict(zip(col_names, r)) for r in rows]
+        return [dict(zip(col_names, r)) for r in rows]
+
+    try:
+        dbs = await asyncio.to_thread(_run)
         return {
             "databases": [
                 {
@@ -259,7 +321,8 @@ async def browse_schemas(
     conn = await _get_conn_or_404(connection_id, db)
     # Validate identifier to prevent SQL injection
     db_safe = _safe_ident(database, "database")
-    try:
+
+    def _run():
         sf = _open_connector(conn)
         cur = sf.cursor()
         cur.execute(f'SHOW SCHEMAS IN DATABASE "{db_safe}"')
@@ -267,7 +330,10 @@ async def browse_schemas(
         col_names = [d[0].lower() for d in cur.description]
         cur.close()
         sf.close()
-        schemas = [dict(zip(col_names, r)) for r in rows]
+        return [dict(zip(col_names, r)) for r in rows]
+
+    try:
+        schemas = await asyncio.to_thread(_run)
         return {
             "schemas": [
                 {
@@ -298,7 +364,8 @@ async def browse_columns(
     db_safe = _safe_ident(database, "database")
     schema_safe = _safe_ident(schema, "schema")
     table_safe = _safe_ident(table, "table")
-    try:
+
+    def _run():
         sf = _open_connector(conn)
         cur = sf.cursor()
         cur.execute(f"""
@@ -313,12 +380,11 @@ async def browse_columns(
         col_names = [d[0].lower() for d in cur.description]
         cur.close()
         sf.close()
-        return {
-            "columns": [dict(zip(col_names, r)) for r in rows],
-            "database": database,
-            "schema": schema,
-            "table": table,
-        }
+        return [dict(zip(col_names, r)) for r in rows]
+
+    try:
+        columns = await asyncio.to_thread(_run)
+        return {"columns": columns, "database": database, "schema": schema, "table": table}
     except HTTPException:
         raise
     except Exception as e:
@@ -335,7 +401,8 @@ async def browse_tables(
     conn = await _get_conn_or_404(connection_id, db)
     db_safe = _safe_ident(database, "database")
     schema_safe = _safe_ident(schema, "schema")
-    try:
+
+    def _run():
         sf = _open_connector(conn)
         cur = sf.cursor()
         cur.execute(f"""
@@ -352,7 +419,6 @@ async def browse_tables(
         col_names = [d[0].lower() for d in cur.description]
         tables = [dict(zip(col_names, r)) for r in rows]
 
-        # Fetch view definitions for VIEW-type tables
         view_defs: dict[str, str] = {}
         view_names = [t["table_name"] for t in tables if str(t.get("table_type", "")).upper() == "VIEW"]
         if view_names:
@@ -369,12 +435,11 @@ async def browse_tables(
 
         for t in tables:
             t["view_definition"] = view_defs.get(t["table_name"].upper(), "") or None
+        return tables
 
-        return {
-            "tables": tables,
-            "database": database,
-            "schema": schema,
-        }
+    try:
+        tables = await asyncio.to_thread(_run)
+        return {"tables": tables, "database": database, "schema": schema}
     except HTTPException:
         raise
     except Exception as e:

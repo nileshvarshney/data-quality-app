@@ -49,3 +49,49 @@ def test_snowflake_appconfig_keys_removed():
     }
     existing_keys = {item["key"] for item in CONFIG_DEFAULTS}
     assert not removed_keys & existing_keys, f"These keys should be removed: {removed_keys & existing_keys}"
+
+
+from app.api.connections import _mask
+from unittest.mock import MagicMock
+
+
+def _make_conn(**kwargs):
+    """Build a mock SnowflakeConnection with defaults."""
+    defaults = dict(
+        connection_id="abc-123",
+        connection_name="Test",
+        account="myorg-myaccount",
+        sf_user="dq_user",
+        password="enc_pass",
+        warehouse="DQ_WH",
+        role="DQ_ROLE",
+        default_database="MY_DB",
+        default_schema="PUBLIC",
+        description="desc",
+        is_active=True,
+        connection_type="named",
+        is_primary_target=False,
+        created_at=__import__("datetime").datetime(2026, 1, 1),
+        updated_at=__import__("datetime").datetime(2026, 1, 1),
+    )
+    defaults.update(kwargs)
+    m = MagicMock()
+    for k, v in defaults.items():
+        setattr(m, k, v)
+    return m
+
+
+def test_mask_includes_new_fields():
+    """_mask() must include connection_type and is_primary_target."""
+    conn = _make_conn()
+    result = _mask(conn)
+    assert result["connection_type"] == "named"
+    assert result["is_primary_target"] is False
+
+
+def test_mask_primary_target():
+    """_mask() must reflect is_primary_target=True when set."""
+    conn = _make_conn(connection_type="target", is_primary_target=True)
+    result = _mask(conn)
+    assert result["connection_type"] == "target"
+    assert result["is_primary_target"] is True
