@@ -15,19 +15,18 @@ class Settings(BaseSettings):
     app_name: str = "Data Quality & Governance"
     debug: bool = False
 
-    # Database
-    database_url: str = "postgresql+asyncpg://dquser:dqpass@localhost:5432/dqplatform"
-    sync_database_url: str = "postgresql://dquser:dqpass@localhost:5432/dqplatform"
-
-    # Snowflake (for rule execution against source data)
+    # Snowflake — used for both DQ rule execution AND platform data storage
     snowflake_account: str = ""
     snowflake_user: str = ""
     snowflake_password: str = ""
     snowflake_warehouse: str = "DQ_EXECUTION_WH"
     snowflake_profile_warehouse: str = "DQ_SMALL_WH"
-    snowflake_database: str = ""
-    snowflake_schema: str = ""
+    snowflake_database: str = ""   # source data database (for DQ checks)
+    snowflake_schema: str = ""     # source data schema (for DQ checks)
     snowflake_role: str = "DQ_PLATFORM_ROLE"
+    # Platform's own application tables live in a separate database/schema
+    snowflake_app_database: str = "DQ_PLATFORM_DB"
+    snowflake_app_schema: str = "DQ_APP"
 
     # LLM
     llm_provider: str = "ollama"

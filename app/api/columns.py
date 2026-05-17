@@ -8,8 +8,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy import select, insert, delete, and_
 
 from app.db.database import get_db
 from app.db.models import ColumnMetadata, ColumnProfileHistory, DataAsset
@@ -289,20 +288,19 @@ async def _run_column_profile(job_id: str, asset_id: str) -> None:
                 )
 
             # Upsert history — one snapshot per column per day
+            # Snowflake doesn't support ON CONFLICT; use delete-then-insert instead
             if history_rows:
-                hist_stmt = pg_insert(ColumnProfileHistory).values(history_rows)
-                hist_stmt = hist_stmt.on_conflict_do_update(
-                    constraint="uq_col_profile_history",
-                    set_={
-                        "null_count":      hist_stmt.excluded.null_count,
-                        "unique_count":    hist_stmt.excluded.unique_count,
-                        "row_count":       hist_stmt.excluded.row_count,
-                        "cardinality_pct": hist_stmt.excluded.cardinality_pct,
-                        "top_values":      hist_stmt.excluded.top_values,
-                        "created_at":      hist_stmt.excluded.created_at,
-                    },
-                )
-                await db.execute(hist_stmt)
+                for row in history_rows:
+                    await db.execute(
+                        delete(ColumnProfileHistory).where(
+                            and_(
+                                ColumnProfileHistory.asset_id == row["asset_id"],
+                                ColumnProfileHistory.column_name == row["column_name"],
+                                ColumnProfileHistory.profile_date == row["profile_date"],
+                            )
+                        )
+                    )
+                await db.execute(insert(ColumnProfileHistory).values(history_rows))
 
             await db.commit()  # single commit for all columns + history
 

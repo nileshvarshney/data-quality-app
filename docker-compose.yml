@@ -1,23 +1,6 @@
 version: "3.9"
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: dq_postgres
-    environment:
-      POSTGRES_DB: dqplatform
-      POSTGRES_USER: dquser
-      POSTGRES_PASSWORD: dqpass
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dquser -d dqplatform"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
   api:
     build:
       context: .
@@ -26,22 +9,22 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql+asyncpg://dquser:dqpass@postgres:5432/dqplatform
-      SYNC_DATABASE_URL: postgresql://dquser:dqpass@postgres:5432/dqplatform
       APP_ENV: local
+      SNOWFLAKE_ACCOUNT: ${SNOWFLAKE_ACCOUNT:-}
+      SNOWFLAKE_USER: ${SNOWFLAKE_USER:-}
+      SNOWFLAKE_PASSWORD: ${SNOWFLAKE_PASSWORD:-}
+      SNOWFLAKE_WAREHOUSE: ${SNOWFLAKE_WAREHOUSE:-DQ_EXECUTION_WH}
+      SNOWFLAKE_DATABASE: ${SNOWFLAKE_DATABASE:-}
+      SNOWFLAKE_SCHEMA: ${SNOWFLAKE_SCHEMA:-}
+      SNOWFLAKE_ROLE: ${SNOWFLAKE_ROLE:-DQ_PLATFORM_ROLE}
+      SNOWFLAKE_APP_DATABASE: ${SNOWFLAKE_APP_DATABASE:-DQ_PLATFORM_DB}
+      SNOWFLAKE_APP_SCHEMA: ${SNOWFLAKE_APP_SCHEMA:-DQ_APP}
       LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b-instruct}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      SNOWFLAKE_ACCOUNT: ${SNOWFLAKE_ACCOUNT:-}
-      SNOWFLAKE_USER: ${SNOWFLAKE_USER:-}
-      SNOWFLAKE_PASSWORD: ${SNOWFLAKE_PASSWORD:-}
-      SNOWFLAKE_WAREHOUSE: ${SNOWFLAKE_WAREHOUSE:-DQ_EXECUTION_WH}
-    depends_on:
-      postgres:
-        condition: service_healthy
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -74,5 +57,4 @@ services:
       - ollama
 
 volumes:
-  pgdata:
   ollama_data:
