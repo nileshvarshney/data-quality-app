@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from sqlalchemy import (
     String, Boolean, Float, Integer, BigInteger, SmallInteger, Text, DateTime,
     JSON, ForeignKey, Date, Index, UniqueConstraint,
@@ -86,6 +86,7 @@ class DataAsset(Base):
     sf_table_name: Mapped[str] = mapped_column(String(200), nullable=False)
     table_type: Mapped[str | None] = mapped_column(String(50))
     table_description: Mapped[str | None] = mapped_column(Text)
+    view_definition: Mapped[str | None] = mapped_column(Text)
     owner_name: Mapped[str | None] = mapped_column(String(200))
     owner_email: Mapped[str | None] = mapped_column(String(200))
     technical_owner_name: Mapped[str | None] = mapped_column(String(200))
@@ -287,11 +288,13 @@ class DQAlert(Base):
     __tablename__ = "dq_alerts"
 
     alert_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
-    run_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    rule_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    rule_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     domain_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     subdomain_id: Mapped[str] = mapped_column(String(36), nullable=False)
     asset_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    alert_type: Mapped[str] = mapped_column(String(30), nullable=False, default="rule_failure")
+    drift_asset_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     severity: Mapped[str] = mapped_column(String(20), nullable=False)
     alert_status: Mapped[str] = mapped_column(String(20), default="open", index=True)
     alert_message: Mapped[str | None] = mapped_column(Text)
@@ -302,6 +305,40 @@ class DQAlert(Base):
     acknowledged_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class SchemaBaseline(Base):
+    __tablename__ = "schema_baselines"
+    __table_args__ = (
+        Index("ix_schema_baselines_asset_status", "asset_id", "status"),
+    )
+
+    baseline_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    asset_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_assets.asset_id", ondelete="CASCADE"), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    columns_snapshot: Mapped[list | None] = mapped_column(JSON)
+    approved_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class SchemaDriftEvent(Base):
+    __tablename__ = "schema_drift_events"
+    __table_args__ = (
+        Index("ix_drift_events_asset_status", "asset_id", "status"),
+    )
+
+    event_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    asset_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_assets.asset_id", ondelete="CASCADE"), nullable=False)
+    baseline_id: Mapped[str] = mapped_column(String(36), ForeignKey("schema_baselines.baseline_id"), nullable=False)
+    detected_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    change_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    column_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    old_value: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    new_value: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="open")
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    resolved_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
 
 
 class SnowflakeConnection(Base):
@@ -449,6 +486,26 @@ class ColumnMetadata(Base):
     last_profiled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     updated_by: Mapped[str | None] = mapped_column(String(200))
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
+
+
+class ColumnProfileHistory(Base):
+    __tablename__ = "column_profile_history"
+    __table_args__ = (
+        UniqueConstraint("asset_id", "column_name", "profile_date", name="uq_col_profile_history"),
+        Index("ix_col_profile_history_asset_date", "asset_id", "profile_date"),
+        Index("ix_col_profile_history_asset_col_date", "asset_id", "column_name", "profile_date"),
+    )
+
+    history_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    asset_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_assets.asset_id", ondelete="CASCADE"), nullable=False)
+    column_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    profile_date: Mapped[date] = mapped_column(Date, nullable=False)
+    null_count: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    unique_count: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    row_count: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    cardinality_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    top_values: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now, nullable=False)
 
 
 class DataProduct(Base):
@@ -797,27 +854,6 @@ class IncidentRunbook(Base):
     created_by: Mapped[str | None] = mapped_column(String(200))
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
 
-
-class DataLineage(Base):
-    __tablename__ = "data_lineage"
-    __table_args__ = (
-        Index("ix_lineage_upstream", "upstream_asset_id"),
-        Index("ix_lineage_downstream", "downstream_asset_id"),
-    )
-
-    lineage_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
-    upstream_asset_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("data_assets.asset_id"), nullable=True)
-    downstream_asset_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("data_assets.asset_id"), nullable=True)
-    lineage_type: Mapped[str | None] = mapped_column(String(30))
-    downstream_name: Mapped[str | None] = mapped_column(String(200))
-    downstream_type: Mapped[str | None] = mapped_column(String(50))
-    transformation_sql: Mapped[str | None] = mapped_column(Text)
-    description: Mapped[str | None] = mapped_column(Text)
-    owner_email: Mapped[str | None] = mapped_column(String(200))
-    is_critical: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_by: Mapped[str | None] = mapped_column(String(200))
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
 
 
 class DataSharingAgreement(Base):

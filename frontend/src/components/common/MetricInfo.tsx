@@ -168,4 +168,83 @@ export const METRICS: Record<string, MetricDef> = {
       { range: '▼', meaning: 'Quality degraded — investigate', color: 'text-red-400' },
     ],
   },
+
+  // ── Schema / Column Profile metrics ─────────────────────────────────────────
+  schemaDataType: {
+    label: 'Data Type',
+    what: 'The Snowflake column data type (e.g. VARCHAR, NUMBER, TIMESTAMP_NTZ). Sourced from INFORMATION_SCHEMA.COLUMNS.',
+    tip: 'Data type determines which profiling stats are computed. Min/Max/Mean/Std Dev only apply to numeric and date types.',
+  },
+  schemaNullable: {
+    label: 'Nullable',
+    what: 'Whether NULL values are permitted in this column per the Snowflake schema definition.',
+    thresholds: [
+      { range: 'Yes', meaning: 'NULLs are allowed — consider a null_check rule if the column should be required', color: 'text-gray-400' },
+      { range: 'No', meaning: 'Column is NOT NULL constrained at the schema level', color: 'text-green-400' },
+    ],
+    tip: 'Even if nullable=No, Snowflake does not enforce NOT NULL on external tables — always add a null_check rule for critical columns.',
+  },
+  nullPct: {
+    label: 'Null %',
+    what: 'Percentage of rows where this column contains a NULL value, computed during the last profiling run.',
+    formula: 'null_count / total_rows × 100',
+    thresholds: [
+      { range: '0%', meaning: 'Fully populated — no nulls', color: 'text-green-400' },
+      { range: '≤ 10%', meaning: 'Acceptable — minor gaps present', color: 'text-yellow-400' },
+      { range: '> 10%', meaning: 'High null rate — flagged orange', color: 'text-orange-400' },
+    ],
+    tip: 'Columns with > 10% nulls are highlighted orange. They are prime candidates for a null_check DQ rule.',
+  },
+  distinctCount: {
+    label: 'Distinct',
+    what: 'Number of unique non-null values found in this column during profiling. Computed via COUNT(DISTINCT).',
+    tip: 'If Distinct equals total row count the column is effectively a unique key — consider a uniqueness_check rule.',
+  },
+  cardinality: {
+    label: 'Cardinality',
+    what: 'Distinct values as a percentage of total rows. Measures how selective this column is.',
+    formula: 'distinct_count / total_rows × 100',
+    thresholds: [
+      { range: '< 5%', meaning: 'Low — few unique values (highlighted amber)', color: 'text-amber-400' },
+      { range: '5–60%', meaning: 'Medium — typical for most columns', color: 'text-gray-400' },
+      { range: '> 90%', meaning: 'High — near-unique, likely an ID column', color: 'text-blue-400' },
+    ],
+    tip: 'Amber (<5%) means the column has a small fixed set of values — a strong signal to add an accepted_values rule.',
+  },
+  minValue: {
+    label: 'Min Value',
+    what: 'Minimum observed value in this column. Shown for numeric and date/time types only (hidden for text).',
+    tip: 'Use Min + Max together to configure bounds for a range_check rule.',
+  },
+  maxValue: {
+    label: 'Max Value',
+    what: 'Maximum observed value in this column. Shown for numeric and date/time types only (hidden for text).',
+    tip: 'Use Min + Max together to configure bounds for a range_check rule.',
+  },
+  mean: {
+    label: 'Mean',
+    what: 'Arithmetic average of all non-null numeric values, computed via AVG() during profiling.',
+    formula: 'SUM(column) / COUNT(non-null rows)',
+    tip: 'A sudden shift in mean across profiling runs often signals upstream data quality issues.',
+  },
+  stdDev: {
+    label: 'Std Dev',
+    what: 'Standard deviation of numeric column values — measures how spread out values are around the mean.',
+    formula: 'STDDEV(column)',
+    thresholds: [
+      { range: 'Std Dev >> Mean', meaning: 'Wide spread — possible outliers present', color: 'text-orange-400' },
+      { range: 'Std Dev ≈ 0', meaning: 'Values are near-constant', color: 'text-blue-400' },
+    ],
+    tip: 'A std dev significantly larger than the mean may indicate data anomalies worth investigating.',
+  },
+  topValues: {
+    label: 'Top Values',
+    what: 'Most frequent non-null values in this column, ranked by occurrence count. Hover the cell to see the full list with counts.',
+    tip: 'For low-cardinality columns, this is essentially the complete set of allowed values — great for building accepted_values rules.',
+  },
+  colDescription: {
+    label: 'Description',
+    what: 'Business context for this column. Helps data consumers understand what the column represents and how to use it correctly.',
+    tip: 'Descriptions are editable via PUT /assets/{id}/columns/{name}. You can also sync them from a dbt manifest upload.',
+  },
 }

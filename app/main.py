@@ -19,9 +19,11 @@ from app.api import (
     # §53 Catalog & Governance
     glossary, classifications, columns, data_products,
     comments, announcements, access_requests, tags, usage, catalog,
+    lineage,
+    schema_drift,
     # §54-§68 Advanced features
     governance, contracts, compliance, cost, incidents,
-    anomaly, lineage, marketplace, mesh, observability, cicd,
+    anomaly, marketplace, mesh, observability, cicd,
     privacy, admin,
 )
 from app.api.users import router as users_router
@@ -174,6 +176,8 @@ app.include_router(access_requests.router)
 app.include_router(tags.router)
 app.include_router(usage.router)
 app.include_router(catalog.router)
+app.include_router(lineage.router)
+app.include_router(schema_drift.router)
 
 # §54-§68 Advanced feature routers
 app.include_router(governance.router)
@@ -182,7 +186,6 @@ app.include_router(compliance.router)
 app.include_router(cost.router)
 app.include_router(incidents.router)
 app.include_router(anomaly.router)
-app.include_router(lineage.router)
 app.include_router(marketplace.router)
 app.include_router(mesh.router)
 app.include_router(observability.router)

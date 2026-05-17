@@ -582,14 +582,15 @@ export default function ExecutivePage() {
 
   // ── Data loading ────────────────────────────────────────────────────────────
 
-  const loadSummaryAndDomains = useCallback(async (days: string) => {
-    const [summaryRes, domainRes, statsRes] = await Promise.all([
-      costApi.summary({ days }),
-      costApi.byDomain({ days }),
+  const loadOverview = useCallback(async (days: string) => {
+    const [overviewRes, statsRes] = await Promise.all([
+      costApi.overview({ days }),
       incidentsApi.stats(),
     ])
-    setSummary(summaryRes.data ?? null)
-    setDomainCosts(Array.isArray(domainRes.data) ? domainRes.data : [])
+    const d = overviewRes.data
+    setSummary(d?.summary ?? null)
+    setDomainCosts(Array.isArray(d?.domain_costs) ? d.domain_costs : [])
+    setAssetCosts(Array.isArray(d?.asset_costs) ? d.asset_costs : [])
     setOpenIncidents((statsRes.data as IncidentStats)?.open_count ?? 0)
   }, [])
 
@@ -624,16 +625,20 @@ export default function ExecutivePage() {
   const fullLoad = useCallback(async (days: string, domainId?: string, subdomainId?: string) => {
     setLoading(true)
     try {
-      await Promise.all([
-        loadSummaryAndDomains(days),
-        domainId ? loadSubdomains(days, domainId) : Promise.resolve(),
-        loadAssets(days, domainId, subdomainId),
-        loadConfigs(),
-      ])
+      if (!domainId && !subdomainId) {
+        await Promise.all([loadOverview(days), loadConfigs()])
+      } else {
+        await Promise.all([
+          loadOverview(days),
+          loadSubdomains(days, domainId!),
+          loadAssets(days, domainId, subdomainId),
+          loadConfigs(),
+        ])
+      }
     } finally {
       setLoading(false)
     }
-  }, [loadSummaryAndDomains, loadSubdomains, loadAssets, loadConfigs])
+  }, [loadOverview, loadSubdomains, loadAssets, loadConfigs])
 
   useEffect(() => {
     fullLoad(period, drillDomain?.domain_id, drillSubdomain?.subdomain_id)
@@ -679,9 +684,11 @@ export default function ExecutivePage() {
   // ── Cost config handlers ────────────────────────────────────────────────────
 
   const refreshKpis = async () => {
-    const [s, d] = await Promise.all([costApi.summary({ days: period }), costApi.byDomain({ days: period })])
-    setSummary(s.data ?? null)
-    setDomainCosts(Array.isArray(d.data) ? d.data : [])
+    const res = await costApi.overview({ days: period })
+    const d = res.data
+    setSummary(d?.summary ?? null)
+    setDomainCosts(Array.isArray(d?.domain_costs) ? d.domain_costs : [])
+    setAssetCosts(Array.isArray(d?.asset_costs) ? d.asset_costs : [])
   }
 
   const handleConfigSave = async (assetId: string) => {

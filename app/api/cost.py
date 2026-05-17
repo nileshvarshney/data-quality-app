@@ -109,6 +109,68 @@ async def _build_asset_cost_table(
     return rows
 
 
+@router.get("/overview")
+async def cost_overview(
+    days: int = Query(30, ge=1, le=365),
+    db: AsyncSession = Depends(get_db),
+):
+    """Combined summary + domain costs + asset costs in one query pass."""
+    asset_rows = await _build_asset_cost_table(db, days=days)
+
+    total_cost = sum(r["total_cost"] for r in asset_rows)
+    configured_assets = sum(1 for r in asset_rows if r["has_cost_config"])
+    total_failed_rows = sum(r["failed_rows_30d"] for r in asset_rows)
+
+    active_rules_result = await db.execute(
+        select(func.count(DQRule.rule_id)).where(DQRule.is_active == True)
+    )
+    active_rules = int(active_rules_result.scalar_one() or 0)
+
+    cutoff = _cutoff(days)
+    passed_runs_result = await db.execute(
+        select(func.count(DQRuleRun.run_id))
+        .where(DQRuleRun.status == "passed", DQRuleRun.created_at >= cutoff)
+    )
+    passed_count = int(passed_runs_result.scalar_one() or 0)
+    cost_averted = round(passed_count * 500.0 * 0.01, 2)
+
+    summary = {
+        "total_cost_30d": round(total_cost, 2),
+        "total_estimated_cost": round(total_cost, 2),
+        "cost_averted": cost_averted,
+        "active_rules": active_rules,
+        "configured_assets": configured_assets,
+        "total_failed_rows": total_failed_rows,
+        "period_days": days,
+    }
+
+    domain_map: dict[str, dict] = {}
+    for r in asset_rows:
+        did = r["domain_id"]
+        if did not in domain_map:
+            domain_map[did] = {
+                "domain_id": did,
+                "domain_name": r["domain_name"],
+                "total_cost": 0.0,
+                "failed_rows": 0,
+                "run_count": 0,
+                "asset_count": 0,
+                "configured_assets": 0,
+            }
+        domain_map[did]["total_cost"] = round(domain_map[did]["total_cost"] + r["total_cost"], 2)
+        domain_map[did]["failed_rows"] += r["failed_rows_30d"]
+        domain_map[did]["run_count"] += r["run_count"]
+        domain_map[did]["asset_count"] += 1
+        if r["has_cost_config"]:
+            domain_map[did]["configured_assets"] += 1
+
+    return {
+        "summary": summary,
+        "domain_costs": sorted(domain_map.values(), key=lambda x: x["total_cost"], reverse=True),
+        "asset_costs": sorted(asset_rows, key=lambda x: x["total_cost"], reverse=True),
+    }
+
+
 @router.get("/summary")
 async def cost_summary(
     days: int = Query(30, ge=1, le=365),

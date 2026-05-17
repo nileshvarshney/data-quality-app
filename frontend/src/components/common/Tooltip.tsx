@@ -24,8 +24,12 @@ export default function Tooltip({
   maxWidth = 260,
   delay = 250,
 }: TooltipProps) {
-  const [visible, setVisible] = useState(false)
-  const [side, setSide]       = useState(position)
+  const [visible, setVisible]   = useState(false)
+  const [side, setSide]         = useState(position)
+  // tipStyle holds the computed fixed-position coords.
+  // Starts with visibility:hidden to prevent a flash at (0,0) before measurement.
+  const [tipStyle, setTipStyle] = useState<React.CSSProperties>({ visibility: 'hidden' })
+
   const triggerRef = useRef<HTMLDivElement>(null)
   const tipRef     = useRef<HTMLDivElement>(null)
   const timerRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -37,21 +41,55 @@ export default function Tooltip({
   const hide = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current)
     setVisible(false)
-  }, [])
+    // Reset so the next show() re-measures from scratch
+    setTipStyle({ visibility: 'hidden' })
+    setSide(position)
+  }, [position])
 
-  // Auto-flip when the tooltip would overflow the viewport
+  // Compute position using fixed coordinates from getBoundingClientRect.
+  // This prevents clipping by any overflow:auto/hidden ancestor (e.g. the
+  // overflow-x-auto table wrapper in the Schema tab).
   useEffect(() => {
     if (!visible || !triggerRef.current || !tipRef.current) return
-    const tr = triggerRef.current.getBoundingClientRect()
-    const tp = tipRef.current.getBoundingClientRect()
-    const vw = window.innerWidth
-    const vh = window.innerHeight
+
+    const tr  = triggerRef.current.getBoundingClientRect()
+    const tp  = tipRef.current.getBoundingClientRect()
+    const vw  = window.innerWidth
+    const vh  = window.innerHeight
+    const GAP = 8
+
+    // ── 1. Determine the best side (flip if preferred side has no room) ──────
     let best = position
-    if (position === 'top'    && tr.top    < tp.height + 8) best = 'bottom'
-    if (position === 'bottom' && tr.bottom > vh - tp.height - 8) best = 'top'
-    if (position === 'left'   && tr.left   < tp.width  + 8) best = 'right'
-    if (position === 'right'  && tr.right  > vw - tp.width  - 8) best = 'left'
+    if (position === 'top'    && tr.top    < tp.height + GAP) best = 'bottom'
+    if (position === 'bottom' && tr.bottom > vh - tp.height - GAP) best = 'top'
+    if (position === 'left'   && tr.left   < tp.width  + GAP) best = 'right'
+    if (position === 'right'  && tr.right  > vw - tp.width  - GAP) best = 'left'
     if (best !== side) setSide(best)
+
+    // ── 2. Compute raw top/left (fixed, viewport-relative) ───────────────────
+    let top: number
+    let left: number
+
+    if (best === 'top') {
+      top  = tr.top - tp.height - GAP
+      left = tr.left + tr.width / 2 - tp.width / 2
+    } else if (best === 'bottom') {
+      top  = tr.bottom + GAP
+      left = tr.left + tr.width / 2 - tp.width / 2
+    } else if (best === 'left') {
+      top  = tr.top + tr.height / 2 - tp.height / 2
+      left = tr.left - tp.width - GAP
+    } else {
+      // right
+      top  = tr.top + tr.height / 2 - tp.height / 2
+      left = tr.right + GAP
+    }
+
+    // ── 3. Clamp to viewport so tooltip never overflows any edge ─────────────
+    left = Math.max(GAP, Math.min(vw - tp.width - GAP, left))
+    top  = Math.max(GAP, Math.min(vh - tp.height - GAP, top))
+
+    setTipStyle({ top, left, visibility: 'visible' })
   }, [visible, position, side])
 
   useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current) }, [])
@@ -59,17 +97,12 @@ export default function Tooltip({
   const body = content ?? text
   if (!body) return <>{children}</>
 
-  const placement: Record<string, string> = {
-    top:    'bottom-full left-1/2 -translate-x-1/2 mb-2',
-    bottom: 'top-full left-1/2 -translate-x-1/2 mt-2',
-    left:   'right-full top-1/2 -translate-y-1/2 mr-2',
-    right:  'left-full top-1/2 -translate-y-1/2 ml-2',
-  }
+  // Arrow direction: absolute inside the fixed bubble, points back toward trigger.
   const arrow: Record<string, string> = {
-    top:    'top-full left-1/2 -translate-x-1/2 border-t-gray-900 border-x-transparent border-b-transparent',
-    bottom: 'bottom-full left-1/2 -translate-x-1/2 border-b-gray-900 border-x-transparent border-t-transparent',
-    left:   'left-full top-1/2 -translate-y-1/2 border-l-gray-900 border-y-transparent border-r-transparent',
-    right:  'right-full top-1/2 -translate-y-1/2 border-r-gray-900 border-y-transparent border-l-transparent',
+    top:    'top-full left-1/2 -translate-x-1/2 border-t-[#1a1f2e] border-x-transparent border-b-transparent',
+    bottom: 'bottom-full left-1/2 -translate-x-1/2 border-b-[#1a1f2e] border-x-transparent border-t-transparent',
+    left:   'left-full top-1/2 -translate-y-1/2 border-l-[#1a1f2e] border-y-transparent border-r-transparent',
+    right:  'right-full top-1/2 -translate-y-1/2 border-r-[#1a1f2e] border-y-transparent border-l-transparent',
   }
 
   return (
@@ -83,29 +116,23 @@ export default function Tooltip({
     >
       {children}
 
-      {/* Tooltip bubble */}
+      {/* Tooltip bubble — fixed so it escapes overflow:auto ancestors */}
       <div
         ref={tipRef}
         role="tooltip"
-        style={{ maxWidth, width: 'max-content' }}
+        style={{ maxWidth, width: 'max-content', ...tipStyle }}
         className={[
-          'absolute z-[9999] pointer-events-none',
-          placement[side],
-          visible ? 'opacity-100 scale-100' : 'opacity-0 scale-95',
+          'fixed z-[9999] pointer-events-none',
+          visible && tipStyle.visibility === 'visible' ? 'opacity-100 scale-100' : 'opacity-0 scale-95',
           'transition-all duration-150',
-          'bg-gray-900 text-white text-[11px] leading-relaxed',
-          'px-3 py-2 rounded-lg shadow-xl',
+          'bg-[#1a1f2e] text-white text-[10px] leading-snug',
+          'px-2.5 py-1.5 rounded-md shadow-lg ring-1 ring-white/10',
         ].join(' ')}
       >
-        {typeof body === 'string'
-          ? <span>{body}</span>
-          : body}
+        {typeof body === 'string' ? <span>{body}</span> : body}
 
         {/* Arrow */}
-        <span className={[
-          'absolute w-0 h-0 border-4',
-          arrow[side],
-        ].join(' ')} />
+        <span className={['absolute w-0 h-0 border-4', arrow[side]].join(' ')} />
       </div>
     </div>
   )

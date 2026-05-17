@@ -201,6 +201,30 @@ async def _nightly_column_profile():
         _asyncio.create_task(_run_column_profile(job_id, asset.asset_id))
 
 
+async def _nightly_drift_detect():
+    """Run schema drift detection for all active assets (04:00 UTC, after column profiling)."""
+    from app.db.database import AsyncSessionLocal
+    from app.db.models import DataAsset
+    from sqlalchemy import select as _select
+    from app.services.schema_drift_service import detect_drift, initialize_baseline, get_active_baseline
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(_select(DataAsset).where(DataAsset.is_active == True))
+        assets = result.scalars().all()
+
+    logger.info("Nightly drift detection: checking %d assets", len(assets))
+    for asset in assets:
+        try:
+            async with AsyncSessionLocal() as db:
+                baseline = await get_active_baseline(asset.asset_id, db)
+                if baseline is None:
+                    await initialize_baseline(asset.asset_id, db)
+                else:
+                    await detect_drift(asset.asset_id, db)
+        except Exception as e:
+            logger.error("Drift detection failed for asset %s: %s", asset.asset_id, e)
+
+
 def _schedule_quality_aggregation_job(enabled: bool = True, hour: int = 0, minute: int = 5):
     """Register (or remove) the nightly quality-score aggregation job."""
     if not enabled:
@@ -254,11 +278,30 @@ def _schedule_column_profile_job(enabled: bool = True, hour: int = 2, minute: in
     logger.info("Registered nightly column profiling job (%02d:%02d %s)", hour, minute, settings.default_timezone)
 
 
+def _schedule_drift_detect_job(enabled: bool = True, hour: int = 4, minute: int = 0):
+    """Register (or remove) the nightly schema drift detection job."""
+    if not enabled:
+        try:
+            scheduler.remove_job("nightly_drift_detect")
+            logger.info("Drift detection job disabled — removed from scheduler")
+        except Exception:
+            pass
+        return
+    scheduler.add_job(
+        _nightly_drift_detect,
+        trigger=CronTrigger(hour=hour, minute=minute, timezone=settings.default_timezone),
+        id="nightly_drift_detect",
+        replace_existing=True,
+    )
+    logger.info("Registered nightly drift detection job (%02d:%02d %s)", hour, minute, settings.default_timezone)
+
+
 def _register_nightly_aggregation():
     """Register all nightly system jobs with their default schedules."""
     _schedule_quality_aggregation_job()  # default 00:05
     _schedule_policy_evaluation_job()    # default 00:15
     _schedule_column_profile_job()       # default 02:00
+    _schedule_drift_detect_job()         # default 04:00
 
 
 async def load_all_schedules(db):

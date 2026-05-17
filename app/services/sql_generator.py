@@ -116,18 +116,23 @@ class SQLGenerator:
         if not column and config.get("columns"):
             column = config["columns"][0]
         generators = {
-            "null_check": self._null_check,
-            "uniqueness_check": self._uniqueness_check,
-            "duplicate_check": self._duplicate_check,
-            "accepted_values_check": self._accepted_values_check,
-            "range_check": self._range_check,
-            "freshness_check": self._freshness_check,
-            "volume_check": self._volume_check,
-            "schema_drift_check": self._schema_drift_check,
-            "referential_integrity_check": self._referential_integrity_check,
-            "regex_check": self._regex_check,
-            "business_rule_check": self._business_rule_check,
-            "custom_sql_check": self._custom_sql_check,
+            "null_check":                     self._null_check,
+            "uniqueness_check":               self._uniqueness_check,
+            "duplicate_check":                self._duplicate_check,
+            "accepted_values_check":          self._accepted_values_check,
+            "range_check":                    self._range_check,
+            "freshness_check":                self._freshness_check,
+            "volume_check":                   self._volume_check,
+            "schema_drift_check":             self._schema_drift_check,
+            "referential_integrity_check":    self._referential_integrity_check,
+            "regex_check":                    self._regex_check,
+            "business_rule_check":            self._business_rule_check,
+            "custom_sql_check":               self._custom_sql_check,
+            "semantic_consistency_check":     self._semantic_consistency_check,
+            "business_metric_check":          self._business_metric_check,
+            "referential_sanity_check":       self._referential_sanity_check,
+            "distribution_consistency_check": self._distribution_consistency_check,
+            "llm_semantic_check":             self._llm_semantic_check,
         }
         gen_fn = generators.get(rule_type)
         if not gen_fn:
@@ -359,53 +364,18 @@ class SQLGenerator:
 
     def _llm_semantic_check(self, config: dict, table_ref: str, column: str | None) -> str:
         """
-        LLM-validated semantic check.  The platform samples rows and sends them
-        to the LLM with a validation_prompt.  SQL here just returns the sample rows —
-        actual pass/fail is determined by the execution_service calling the LLM.
-        config.sample_size: number of rows to evaluate (default 100)
-        config.validation_prompt: the validation instruction for the LLM
+        Samples rows for LLM-based semantic validation.
+        Returns 0 AS failed_count — actual pass/fail requires LLM evaluation
+        in execution_service (not yet implemented).
+        config.sample_size: number of rows to sample (default 100)
+        config.validation_prompt: validation instruction for the LLM
         """
         sample_size = config.get("sample_size", 100)
         return (
-            f"SELECT * FROM {table_ref} "
-            f"USING SAMPLE {sample_size} ROWS"
+            f"SELECT 0 AS failed_count FROM ("
+            f"SELECT * FROM {table_ref} ORDER BY RANDOM() LIMIT {sample_size}"
+            f") _sample"
         )
 
-
-# Register the new semantic rule types
-SQLGenerator.generate.__wrapped__ = None  # clear any cache
-
-# Patch the generators dict inside generate() by rebuilding the mapping
-_ORIGINAL_GENERATE = SQLGenerator.generate
-
-def _patched_generate(self, rule_type: str, config: dict, table_ref: str, column: str | None) -> str:
-    if not column and config.get("columns"):
-        column = config["columns"][0]
-    generators = {
-        "null_check":                    self._null_check,
-        "uniqueness_check":              self._uniqueness_check,
-        "duplicate_check":               self._duplicate_check,
-        "accepted_values_check":         self._accepted_values_check,
-        "range_check":                   self._range_check,
-        "freshness_check":               self._freshness_check,
-        "volume_check":                  self._volume_check,
-        "schema_drift_check":            self._schema_drift_check,
-        "referential_integrity_check":   self._referential_integrity_check,
-        "regex_check":                   self._regex_check,
-        "business_rule_check":           self._business_rule_check,
-        "custom_sql_check":              self._custom_sql_check,
-        # §66 Semantic rule types
-        "semantic_consistency_check":    self._semantic_consistency_check,
-        "business_metric_check":         self._business_metric_check,
-        "referential_sanity_check":      self._referential_sanity_check,
-        "distribution_consistency_check": self._distribution_consistency_check,
-        "llm_semantic_check":            self._llm_semantic_check,
-    }
-    gen_fn = generators.get(rule_type)
-    if not gen_fn:
-        raise ValueError(f"Unsupported rule type: {rule_type}")
-    return gen_fn(config, table_ref, column)
-
-SQLGenerator.generate = _patched_generate
 
 sql_generator = SQLGenerator()

@@ -355,6 +355,7 @@ export const incidentsApi = {
 
 // Cost
 export const costApi = {
+  overview:     (params?: object) => api.get('/cost/overview', { params }),
   summary:      (params?: object) => api.get('/cost/summary', { params }),
   byDomain:     (params?: object) => api.get('/cost/by-domain', { params }),
   bySubdomain:  (params?: object) => api.get('/cost/by-subdomain', { params }),
@@ -366,15 +367,6 @@ export const costApi = {
   listConfigs:  () => api.get('/cost/configs'),
 }
 
-// Lineage
-export const lineageApi = {
-  graph:      (assetId: string) => api.get(`/assets/${assetId}/lineage/graph`),
-  upstream:   (assetId: string) => api.get(`/assets/${assetId}/lineage/upstream`),
-  downstream: (assetId: string) => api.get(`/assets/${assetId}/lineage/downstream`),
-  impact:     (assetId: string) => api.get(`/assets/${assetId}/lineage/impact`),
-  create:     (assetId: string, data: object) => api.post(`/assets/${assetId}/lineage`, data),
-  delete:     (lineageId: string) => api.delete(`/assets/lineage/${lineageId}`),
-}
 
 // Observability
 export const observabilityApi = {
@@ -400,4 +392,9 @@ export const adminApi = {
   listDomainsWithStats: () => api.get('/admin/domains'),
   cleanDomainData:      (domainId: string) => api.delete(`/admin/domains/${domainId}/data`),
   deleteDomain:         (domainId: string) => api.delete(`/admin/domains/${domainId}`),
+}
+
+// Lineage
+export const lineageApi = {
+  get: (assetId: string) => api.get(`/lineage/${assetId}`),
 }

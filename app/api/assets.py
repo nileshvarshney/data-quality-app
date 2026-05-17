@@ -155,7 +155,7 @@ async def delete_asset(asset_id: str, db: AsyncSession = Depends(get_db), user=D
 async def get_asset_columns(asset_id: str, db: AsyncSession = Depends(get_db)):
     """Return column metadata. Uses profiled stats from column_metadata when available,
     otherwise falls back to live Snowflake INFORMATION_SCHEMA."""
-    from app.db.models import ColumnMetadata
+    from app.db.models import ColumnMetadata, DataClassification
     import json as _json
 
     result = await db.execute(select(DataAsset).where(DataAsset.asset_id == asset_id))
@@ -172,6 +172,16 @@ async def get_asset_columns(asset_id: str, db: AsyncSession = Depends(get_db)):
         .order_by(ColumnMetadata.ordinal_position)
     )
     profiled = prof_res.scalars().all()
+
+    # Fetch column-level classifications (severity-ordered so PII wins over SENSITIVE etc.)
+    cls_res = await db.execute(
+        select(DataClassification).where(DataClassification.asset_id == asset_id)
+    )
+    _SEVERITY = {'PII': 4, 'SENSITIVE': 3, 'CONFIDENTIAL': 2, 'RESTRICTED': 1, 'PUBLIC': 0}
+    _cls_rows = sorted(cls_res.scalars().all(), key=lambda r: _SEVERITY.get(r.classification, 0))
+    classifications: dict[str, str] = {
+        r.column_name: r.classification for r in _cls_rows if r.column_name
+    }
 
     if profiled:
         def _to_dict(c: ColumnMetadata) -> dict:
@@ -195,7 +205,8 @@ async def get_asset_columns(asset_id: str, db: AsyncSession = Depends(get_db)):
                 "std_dev":          c.std_dev,
                 "top_values":       top,
                 "sample_values":    smp,
-                "last_profiled_at": c.last_profiled_at.isoformat() if c.last_profiled_at else None,
+                "last_profiled_at": c.last_profiled_at.isoformat() + 'Z' if c.last_profiled_at else None,
+                "classification":   classifications.get(c.column_name),
             }
 
         # Derive total_rows: unique_count / (cardinality_pct/100) for any column that has both

@@ -80,6 +80,7 @@ function generateDescription(ruleType: string, columns: string[], schema: string
 function RuleConfigFields({
   ruleType, config, setConfig, inputCls, labelCls,
   acceptedValuesStr, onAcceptedValuesChange,
+  expectedColumnsStr, onExpectedColumnsChange,
 }: {
   ruleType: string
   config: Record<string, any>
@@ -88,6 +89,8 @@ function RuleConfigFields({
   labelCls: string
   acceptedValuesStr?: string
   onAcceptedValuesChange?: (s: string) => void
+  expectedColumnsStr?: string
+  onExpectedColumnsChange?: (s: string) => void
 }) {
   const parseRangeValue = (v: string) => {
     if (v === '') return undefined
@@ -219,10 +222,111 @@ function RuleConfigFields({
         <div>
           <label className={labelCls}>Expected Columns</label>
           <input className={inputCls}
-            value={(config.expected_columns || []).join(', ')}
-            onChange={e => setConfig('expected_columns', e.target.value.split(',').map((s: string) => s.trim()).filter(Boolean))}
+            value={expectedColumnsStr ?? (config.expected_columns || []).join(', ')}
+            onChange={e => onExpectedColumnsChange?.(e.target.value)}
+            onBlur={e => setConfig('expected_columns', e.target.value.split(',').map((s: string) => s.trim()).filter(Boolean))}
             placeholder="id, name, email, created_at" />
           <p className="text-xs text-gray-400 mt-1">Comma-separated list of expected column names</p>
+        </div>
+      )
+    case 'semantic_consistency_check':
+      return (
+        <div>
+          <label className={labelCls}>Consistency Condition</label>
+          <textarea className={inputCls} rows={2}
+            value={config.condition || ''}
+            onChange={e => setConfig('condition', e.target.value)}
+            placeholder="end_date >= start_date AND qty > 0" />
+          <p className="text-xs text-gray-400 mt-1">SQL expression that must be TRUE for valid rows</p>
+        </div>
+      )
+    case 'referential_sanity_check':
+      return (
+        <div>
+          <label className={labelCls}>Sanity Condition</label>
+          <textarea className={inputCls} rows={2}
+            value={config.condition || ''}
+            onChange={e => setConfig('condition', e.target.value)}
+            placeholder="order_status IN ('OPEN','CLOSED','CANCELLED')" />
+          <p className="text-xs text-gray-400 mt-1">Rows matching this condition are considered invalid</p>
+        </div>
+      )
+    case 'business_metric_check':
+      return (
+        <div className="space-y-3">
+          <div>
+            <label className={labelCls}>Metric SQL *</label>
+            <input className={inputCls}
+              value={config.metric_sql || ''}
+              onChange={e => setConfig('metric_sql', e.target.value)}
+              placeholder="AVG(order_amount)" />
+            <p className="text-xs text-gray-400 mt-1">Aggregate SQL expression evaluated against the full table</p>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelCls}>Min Value</label>
+              <input type="number" className={inputCls}
+                value={config.min_value ?? ''}
+                onChange={e => setConfig('min_value', e.target.value === '' ? undefined : Number(e.target.value))}
+                placeholder="50" />
+            </div>
+            <div>
+              <label className={labelCls}>Max Value</label>
+              <input type="number" className={inputCls}
+                value={config.max_value ?? ''}
+                onChange={e => setConfig('max_value', e.target.value === '' ? undefined : Number(e.target.value))}
+                placeholder="10000" />
+            </div>
+          </div>
+        </div>
+      )
+    case 'distribution_consistency_check':
+      return (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelCls}>Baseline Mean</label>
+              <input type="number" className={inputCls}
+                value={config.baseline_mean ?? ''}
+                onChange={e => setConfig('baseline_mean', e.target.value === '' ? undefined : Number(e.target.value))}
+                placeholder="100.0" />
+            </div>
+            <div>
+              <label className={labelCls}>Baseline Std Dev</label>
+              <input type="number" className={inputCls}
+                value={config.baseline_std ?? ''}
+                onChange={e => setConfig('baseline_std', e.target.value === '' ? undefined : Number(e.target.value))}
+                placeholder="15.0" />
+            </div>
+          </div>
+          <div>
+            <label className={labelCls}>Tolerance %</label>
+            <input type="number" className={inputCls}
+              value={config.tolerance_pct ?? 20}
+              onChange={e => setConfig('tolerance_pct', Number(e.target.value))}
+              placeholder="20" />
+            <p className="text-xs text-gray-400 mt-1">Acceptable deviation from baseline mean (default 20%)</p>
+          </div>
+        </div>
+      )
+    case 'llm_semantic_check':
+      return (
+        <div className="space-y-3">
+          <div>
+            <label className={labelCls}>Sample Size</label>
+            <input type="number" className={inputCls}
+              value={config.sample_size ?? 100}
+              onChange={e => setConfig('sample_size', Number(e.target.value))}
+              placeholder="100" />
+            <p className="text-xs text-gray-400 mt-1">Number of rows to send to the LLM for evaluation</p>
+          </div>
+          <div>
+            <label className={labelCls}>Validation Prompt</label>
+            <textarea className={inputCls} rows={3}
+              value={config.validation_prompt || ''}
+              onChange={e => setConfig('validation_prompt', e.target.value)}
+              placeholder="Check that each row represents a valid and complete customer record..." />
+          </div>
         </div>
       )
     default:
@@ -260,6 +364,8 @@ export default function CreateRulePage() {
   const [ruleConfig, setRuleConfig] = useState<Record<string, any>>({})
   // Local string for accepted_values so commas can be typed freely
   const [acceptedValuesStr, setAcceptedValuesStr] = useState('')
+  // Local string for expected_columns so commas can be typed freely
+  const [expectedColumnsStr, setExpectedColumnsStr] = useState('')
 
   // Track if user has manually edited the auto-generated fields
   const nameManual = useRef(false)
@@ -428,6 +534,9 @@ export default function CreateRulePage() {
         ...(form.rule_type === 'accepted_values_check' && acceptedValuesStr
           ? { accepted_values: acceptedValuesStr.split(',').map((s: string) => s.trim()).filter(Boolean) }
           : {}),
+        ...(form.rule_type === 'schema_drift_check' && expectedColumnsStr
+          ? { expected_columns: expectedColumnsStr.split(',').map((s: string) => s.trim()).filter(Boolean) }
+          : {}),
         ...(selectedColumns.length > 1 ? { columns: selectedColumns } : {}),
       }
       const resp = await executionsApi.testRule({
@@ -453,6 +562,9 @@ export default function CreateRulePage() {
         ...ruleConfig,
         ...(form.rule_type === 'accepted_values_check' && acceptedValuesStr
           ? { accepted_values: acceptedValuesStr.split(',').map((s: string) => s.trim()).filter(Boolean) }
+          : {}),
+        ...(form.rule_type === 'schema_drift_check' && expectedColumnsStr
+          ? { expected_columns: expectedColumnsStr.split(',').map((s: string) => s.trim()).filter(Boolean) }
           : {}),
         ...(selectedColumns.length > 1 ? { columns: selectedColumns } : {}),
       }
@@ -546,6 +658,7 @@ export default function CreateRulePage() {
                   set('rule_type', e.target.value)
                   setRuleConfig({})
                   setAcceptedValuesStr('')
+                  setExpectedColumnsStr('')
                   setSelectedColumns([])
                   nameManual.current = false
                   descManual.current = false
@@ -676,6 +789,8 @@ export default function CreateRulePage() {
             labelCls={labelCls}
             acceptedValuesStr={acceptedValuesStr}
             onAcceptedValuesChange={setAcceptedValuesStr}
+            expectedColumnsStr={expectedColumnsStr}
+            onExpectedColumnsChange={setExpectedColumnsStr}
           />
         </section>
 

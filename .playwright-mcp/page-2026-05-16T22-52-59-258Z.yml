@@ -1,0 +1,529 @@
+- generic [ref=e1]:
+  - complementary [ref=e2]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - img "Data Guardian" [ref=e8]
+        - generic [ref=e9]:
+          - paragraph [ref=e10]: Data Guardian
+          - paragraph [ref=e11]: Enterprise Platform
+        - button "Collapse sidebar" [ref=e12] [cursor=pointer]:
+          - img [ref=e13]
+      - generic [ref=e16]:
+        - generic [ref=e17]: LOCAL
+        - generic [ref=e18]: v3.0
+      - button "Quick search… ⌘K" [ref=e19] [cursor=pointer]:
+        - img [ref=e20]
+        - generic [ref=e23]: Quick search…
+        - generic [ref=e24]: ⌘K
+    - navigation [ref=e25]:
+      - generic [ref=e26]:
+        - button "Overview" [ref=e27] [cursor=pointer]:
+          - img [ref=e28]
+          - generic [ref=e31]: Overview
+          - img [ref=e33]
+        - generic [ref=e35]:
+          - link "Global Dashboard" [ref=e36] [cursor=pointer]:
+            - /url: /dashboard/global
+            - img [ref=e38]
+            - generic [ref=e41]: Global Dashboard
+          - link "Cost Impact Dashboard" [ref=e42] [cursor=pointer]:
+            - /url: /executive
+            - img [ref=e44]
+            - generic [ref=e45]: Cost Impact Dashboard
+      - generic [ref=e46]:
+        - button "Data Quality" [ref=e47] [cursor=pointer]:
+          - img [ref=e48]
+          - generic [ref=e50]: Data Quality
+          - img [ref=e52]
+        - generic [ref=e54]:
+          - link "Rules" [ref=e55] [cursor=pointer]:
+            - /url: /rules
+            - img [ref=e57]
+            - generic [ref=e59]: Rules
+          - link "Approval Queue" [ref=e60] [cursor=pointer]:
+            - /url: /rules/approval-queue
+            - img [ref=e62]
+            - generic [ref=e66]: Approval Queue
+          - link "Data Assets" [ref=e67] [cursor=pointer]:
+            - /url: /assets
+            - img [ref=e69]
+            - generic [ref=e73]: Data Assets
+          - link "Schedules" [ref=e74] [cursor=pointer]:
+            - /url: /schedules
+            - img [ref=e76]
+            - generic [ref=e78]: Schedules
+          - link "Execution Logs" [ref=e79] [cursor=pointer]:
+            - /url: /runs
+            - img [ref=e81]
+            - generic [ref=e84]: Execution Logs
+      - generic [ref=e85]:
+        - button "Operations" [ref=e86] [cursor=pointer]:
+          - img [ref=e87]
+          - generic [ref=e90]: Operations
+          - img [ref=e92]
+        - generic [ref=e94]:
+          - link "Alerts" [ref=e95] [cursor=pointer]:
+            - /url: /alerts
+            - img [ref=e97]
+            - generic [ref=e100]: Alerts
+          - link "Audit Logs" [ref=e101] [cursor=pointer]:
+            - /url: /audit
+            - img [ref=e103]
+            - generic [ref=e106]: Audit Logs
+      - generic [ref=e107]:
+        - button "Data Catalog" [ref=e108] [cursor=pointer]:
+          - img [ref=e109]
+          - generic [ref=e112]: Data Catalog
+          - img [ref=e114]
+        - generic [ref=e116]:
+          - link "Data Catalog" [ref=e117] [cursor=pointer]:
+            - /url: /catalog
+            - img [ref=e119]
+            - generic [ref=e122]: Data Catalog
+          - link "Glossary" [ref=e123] [cursor=pointer]:
+            - /url: /glossary
+            - img [ref=e125]
+            - generic [ref=e127]: Glossary
+          - link "Data Products" [ref=e128] [cursor=pointer]:
+            - /url: /data-products
+            - img [ref=e130]
+            - generic [ref=e134]: Data Products
+      - generic [ref=e135]:
+        - button "Governance" [ref=e136] [cursor=pointer]:
+          - img [ref=e137]
+          - generic [ref=e143]: Governance
+          - img [ref=e145]
+        - generic [ref=e147]:
+          - link "Governance Hub" [ref=e148] [cursor=pointer]:
+            - /url: /governance
+            - img [ref=e150]
+            - generic [ref=e154]: Governance Hub
+          - link "Data Contracts" [ref=e155] [cursor=pointer]:
+            - /url: /contracts
+            - img [ref=e157]
+            - generic [ref=e160]: Data Contracts
+          - link "Incidents" [ref=e161] [cursor=pointer]:
+            - /url: /incidents
+            - img [ref=e163]
+            - generic [ref=e165]: Incidents
+          - link "Rule Marketplace" [ref=e166] [cursor=pointer]:
+            - /url: /marketplace
+            - img [ref=e168]
+            - generic [ref=e171]: Rule Marketplace
+      - generic [ref=e172]:
+        - button "Privacy & Compliance" [ref=e173] [cursor=pointer]:
+          - img [ref=e174]
+          - generic [ref=e177]: Privacy & Compliance
+          - img [ref=e179]
+        - link "Compliance" [ref=e182] [cursor=pointer]:
+          - /url: /compliance
+          - img [ref=e184]
+          - generic [ref=e186]: Compliance
+      - generic [ref=e187]:
+        - button "AI Intelligence" [ref=e188] [cursor=pointer]:
+          - img [ref=e189]
+          - generic [ref=e192]: AI Intelligence
+          - img [ref=e194]
+        - generic [ref=e196]:
+          - button "AI Copilot" [ref=e197] [cursor=pointer]:
+            - img [ref=e199]
+            - generic [ref=e201]: AI Copilot
+          - link "AI Assistant" [ref=e202] [cursor=pointer]:
+            - /url: /ai-assistant
+            - img [ref=e204]
+            - generic [ref=e216]: AI Assistant
+      - generic [ref=e217]:
+        - button "Support" [ref=e218] [cursor=pointer]:
+          - img [ref=e219]
+          - generic [ref=e222]: Support
+          - img [ref=e224]
+        - link "Help & Reference" [ref=e227] [cursor=pointer]:
+          - /url: /help
+          - img [ref=e229]
+          - generic [ref=e232]: Help & Reference
+      - generic [ref=e233]:
+        - button "Administration" [ref=e234] [cursor=pointer]:
+          - img [ref=e235]
+          - generic [ref=e238]: Administration
+          - img [ref=e240]
+        - generic [ref=e242]:
+          - link "Domain Management" [ref=e243] [cursor=pointer]:
+            - /url: /admin/domains
+            - img [ref=e245]
+            - generic [ref=e247]: Domain Management
+          - link "User Management" [ref=e248] [cursor=pointer]:
+            - /url: /admin/users
+            - img [ref=e250]
+            - generic [ref=e253]: User Management
+          - link "Data Cleanup" [ref=e254] [cursor=pointer]:
+            - /url: /admin/cleanup
+            - img [ref=e256]
+            - generic [ref=e259]: Data Cleanup
+          - link "Settings" [ref=e260] [cursor=pointer]:
+            - /url: /settings
+            - img [ref=e262]
+            - generic [ref=e265]: Settings
+    - generic [ref=e266]:
+      - button "Dark Mode Off" [ref=e267] [cursor=pointer]:
+        - img [ref=e268]
+        - generic [ref=e270]: Dark Mode
+        - generic [ref=e271]: "Off"
+      - generic [ref=e272]:
+        - generic [ref=e273]: SA
+        - generic [ref=e274]:
+          - paragraph [ref=e275]: System Admin
+          - generic [ref=e276]: Admin
+        - button "Sign out" [ref=e277] [cursor=pointer]:
+          - img [ref=e278]
+      - paragraph [ref=e281]:
+        - img [ref=e282]
+        - text: Data Guardian v3.0
+        - generic [ref=e284]: © 2026
+  - main [ref=e285]:
+    - generic [ref=e286]:
+      - navigation [ref=e295]:
+        - link [ref=e296] [cursor=pointer]:
+          - /url: /dashboard/global
+          - img [ref=e297]
+        - generic [ref=e300]:
+          - img [ref=e301]
+          - link "Global" [ref=e303] [cursor=pointer]:
+            - /url: /dashboard/global
+        - generic [ref=e304]:
+          - img [ref=e305]
+          - link "Domain" [ref=e307] [cursor=pointer]:
+            - /url: /dashboard/domains/97e46ac5-ce83-4d96-911b-c46db533f6cc
+        - generic [ref=e308]:
+          - img [ref=e309]
+          - link "Subdomain" [ref=e311] [cursor=pointer]:
+            - /url: /dashboard/subdomains/230d9772-ea8d-478b-922c-c7814340cbbb
+        - generic [ref=e312]:
+          - img [ref=e313]
+          - generic [ref=e315]: SOURCE_DATA.CUSTOMERS
+      - generic [ref=e316]:
+        - generic [ref=e317]:
+          - generic [ref=e318]:
+            - heading "SOURCE_DATA.CUSTOMERS" [level=1] [ref=e319]
+            - generic [ref=e320]:
+              - img [ref=e321]
+              - text: Uncertified
+          - paragraph [ref=e323]:
+            - generic [ref=e324]: Other Team ·
+            - text: No runs yet
+        - generic [ref=e325]:
+          - generic [ref=e326]:
+            - img [ref=e327]
+            - text: Updated 03:52 PM
+          - link "View Logs" [ref=e330] [cursor=pointer]:
+            - /url: /runs?asset_id=ee48982b-3387-46ca-a2ec-4563b85db635
+          - button "Refresh" [ref=e331] [cursor=pointer]:
+            - img [ref=e332]
+            - text: Refresh
+          - button "Run All Rules" [ref=e337] [cursor=pointer]:
+            - img [ref=e338]
+            - text: Run All Rules
+      - generic [ref=e340]:
+        - button "Quality" [ref=e341] [cursor=pointer]:
+          - img [ref=e342]
+          - text: Quality
+        - button "Schema" [ref=e344] [cursor=pointer]:
+          - img [ref=e345]
+          - text: Schema
+        - button "Lineage" [active] [ref=e347] [cursor=pointer]:
+          - img [ref=e348]
+          - text: Lineage
+        - button "Profile Trends" [ref=e352] [cursor=pointer]:
+          - img [ref=e353]
+          - text: Profile Trends
+      - generic [ref=e356]:
+        - generic [ref=e357]:
+          - img [ref=e359]
+          - generic [ref=e361]:
+            - paragraph [ref=e362]: Certification Status
+            - paragraph [ref=e363]: Not yet certified
+          - generic [ref=e364]:
+            - img [ref=e365]
+            - text: Uncertified
+          - button "Change" [ref=e368] [cursor=pointer]:
+            - img [ref=e369]
+            - text: Change
+        - generic [ref=e372]:
+          - generic [ref=e373]:
+            - img [ref=e374]
+            - generic [ref=e378]: Data Lineage
+            - generic [ref=e379]: 1 upstream · 1 downstream
+            - button "Column Lineage" [ref=e381] [cursor=pointer]:
+              - generic [ref=e382]: Column Lineage
+          - application [ref=e386]:
+            - generic [ref=e388]:
+              - generic:
+                - generic:
+                  - img
+                  - img:
+                    - group "Edge from up-759412a6-c7b1-4558-84cc-e48765bd5cf7 to center"
+                  - img:
+                    - group "Edge from center to dn-edc1af9e-0e47-4c76-a22b-6180d36096da"
+                - generic:
+                  - group:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - img
+                            - generic: DQ_PLATFORM_DB.SOURCE_DATA
+                        - generic: CUSTOMERS
+                        - generic:
+                          - generic: ● current table
+                      - generic:
+                        - generic:
+                          - generic: CUSTOMER_ID
+                          - generic: TEXT
+                        - generic:
+                          - generic: CUSTOMER_NAME
+                          - generic: TEXT
+                        - generic:
+                          - generic: EMAIL
+                          - generic: TEXT
+                        - generic:
+                          - generic: PHONE
+                          - generic: TEXT
+                        - generic:
+                          - generic: COUNTRY
+                          - generic: TEXT
+                        - generic:
+                          - generic: CUSTOMER_TYPE
+                          - generic: TEXT
+                        - generic:
+                          - generic: IS_ACTIVE
+                          - generic: BOOLEAN
+                        - generic:
+                          - generic: CREATED_AT
+                          - generic: TIMESTAMP_NT
+                  - group:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - img
+                            - generic: DQ_PLATFORM_DB.SOURCE_DATA
+                        - generic: ORDERS
+                        - generic:
+                          - generic: upstream
+                      - generic:
+                        - generic:
+                          - generic: ORDER_ID
+                          - generic: TEXT
+                        - generic:
+                          - generic: CUSTOMER_ID
+                          - generic: TEXT
+                        - generic:
+                          - generic: ORDER_DATE
+                          - generic: DATE
+                        - generic:
+                          - generic: ORDER_STATUS
+                          - generic: TEXT
+                        - generic:
+                          - generic: TOTAL_AMOUNT
+                          - generic: NUMBER
+                        - generic:
+                          - generic: WAREHOUSE_ID
+                          - generic: TEXT
+                        - generic:
+                          - generic: CREATED_AT
+                          - generic: TIMESTAMP_NT
+                      - button "Load upstream":
+                        - generic:
+                          - img
+                        - text: Load upstream
+                  - group:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - img
+                            - generic: DQ_PLATFORM_DB.SOURCE_DATA
+                        - generic: INVOICES
+                        - generic:
+                          - generic: downstream
+                          - generic: critical
+                      - generic:
+                        - generic:
+                          - generic: INVOICE_ID
+                          - generic: TEXT
+                        - generic:
+                          - generic: CUSTOMER_ID
+                          - generic: TEXT
+                        - generic:
+                          - generic: INVOICE_DATE
+                          - generic: DATE
+                        - generic:
+                          - generic: DUE_DATE
+                          - generic: DATE
+                        - generic:
+                          - generic: INVOICE_AMOUNT
+                          - generic: NUMBER
+                        - generic:
+                          - generic: PAID_AMOUNT
+                          - generic: NUMBER
+                        - generic:
+                          - generic: CURRENCY
+                          - generic: TEXT
+                        - generic:
+                          - generic: STATUS
+                          - generic: TEXT
+                        - generic:
+                          - generic: PAYMENT_DATE
+                          - generic: DATE
+                        - generic:
+                          - generic: LINE_ITEMS_COUNT
+                          - generic: NUMBER
+                        - generic: +1 more columns
+                      - button "Load downstream":
+                        - generic:
+                          - img
+                        - text: Load downstream
+            - img
+            - generic "Control Panel" [ref=e389]:
+              - button "Zoom In" [ref=e390] [cursor=pointer]:
+                - img [ref=e391]
+              - button "Zoom Out" [ref=e393] [cursor=pointer]:
+                - img [ref=e394]
+              - button "Fit View" [ref=e396] [cursor=pointer]:
+                - img [ref=e397]
+          - generic [ref=e400]:
+            - generic [ref=e401]: Upstream
+            - generic [ref=e403]: Downstream
+            - generic [ref=e405]: PK
+            - generic [ref=e407]: FK
+            - generic [ref=e409]: Click node for details · Click + to expand · Scroll to zoom
+  - dialog "AI Copilot":
+    - generic:
+      - generic:
+        - generic:
+          - img
+        - generic:
+          - generic:
+            - paragraph: AI Copilot
+            - generic:
+              - img
+              - text: quick access
+          - paragraph: Live data · multi-source · conversation memory
+      - generic:
+        - button "Clear conversation":
+          - img
+        - link "Open full-page AI Assistant":
+          - /url: /ai-assistant
+          - img
+        - button:
+          - img
+    - generic:
+      - button "Create Rule":
+        - img
+        - text: Create Rule
+      - generic: Live data · LLM formatted
+    - generic:
+      - button "Why did quality drop today?"
+      - button "Overall quality score"
+      - button "Revenue domain health"
+      - button "Failed rules this week"
+      - button "Open critical alerts"
+      - button "Governance violations"
+      - button "Tables with no owners"
+      - button "Data contracts at risk"
+      - button "Finance quality trend"
+      - button "Active incidents"
+      - button "Cost of bad data"
+      - button "Show HR failing rules"
+    - generic:
+      - generic:
+        - generic:
+          - img
+        - generic:
+          - generic:
+            - generic:
+              - paragraph:
+                - text: Hi! I'm your
+                - strong: AI Copilot
+                - text: — a superman data intelligence assistant with live access to every corner of this platform.
+              - paragraph:
+                - strong: "What I can answer:"
+              - list:
+                - listitem:
+                  - generic: •
+                  - generic:
+                    - strong: Quality
+                    - text: — overall score, domain health, failing rules, trends
+                - listitem:
+                  - generic: •
+                  - generic:
+                    - strong: Root Cause
+                    - text: — why quality dropped, which rules are breaking, patterns
+                - listitem:
+                  - generic: •
+                  - generic:
+                    - strong: Governance
+                    - text: — policy violations, scorecards, uncertified tables, PII gaps
+                - listitem:
+                  - generic: •
+                  - generic:
+                    - strong: Contracts
+                    - text: — data contracts, SLA violations, producer/consumer health
+                - listitem:
+                  - generic: •
+                  - generic:
+                    - strong: Incidents
+                    - text: — open incidents, MTTD, MTTR, blast radius
+                - listitem:
+                  - generic: •
+                  - generic:
+                    - strong: Catalog
+                    - text: — popular assets, data products, business glossary
+                - listitem:
+                  - generic: •
+                  - generic:
+                    - strong: Lineage
+                    - text: — upstream/downstream dependencies, impact analysis
+                - listitem:
+                  - generic: •
+                  - generic:
+                    - strong: Compliance
+                    - text: — GDPR, SOX, HIPAA framework gaps
+                - listitem:
+                  - generic: •
+                  - generic:
+                    - strong: Cost
+                    - text: — bad data ROI, incident cost by domain
+                - listitem:
+                  - generic: •
+                  - generic:
+                    - strong: Alerts
+                    - text: — open critical alerts, severity breakdowns
+              - paragraph:
+                - text: "Try:"
+                - emphasis: "\"Why did Revenue quality drop?\""
+                - text: or
+                - emphasis: "\"Which Finance tables failed this week?\""
+            - generic:
+              - generic:
+                - img
+                - text: AI · live data
+              - button "Copy":
+                - img
+                - text: Copy
+    - generic:
+      - generic:
+        - textbox "Ask about quality, governance, contracts, incidents…"
+        - button [disabled]:
+          - img
+  - button "Open AI Copilot (quick access)" [ref=e291] [cursor=pointer]:
+    - img [ref=e292]
+  - region "Notifications alt+T"
+  - status [ref=e410]:
+    - generic [ref=e411]:
+      - img [ref=e413]
+      - generic [ref=e415]:
+        - text: Static route
+        - button "Hide static indicator" [ref=e416] [cursor=pointer]:
+          - img [ref=e417]
+  - alert [ref=e294]
+  - generic [ref=e420]: "0"

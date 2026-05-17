@@ -2,17 +2,22 @@ import asyncio
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
+from collections import defaultdict
+from datetime import datetime, timezone, date, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.db.database import get_db
-from app.db.models import ColumnMetadata, DataAsset
+from app.db.models import ColumnMetadata, ColumnProfileHistory, DataAsset
 from app.core.security import get_current_user
 from app.services import job_tracker
+
+DRIFT_NULL_PCT_THRESHOLD = 5.0
+DRIFT_CARDINALITY_THRESHOLD = 10.0
 
 logger = logging.getLogger("dq_platform.columns")
 
@@ -49,7 +54,7 @@ def _fmt_col(col: ColumnMetadata, total_rows: int = 0) -> dict:
         "std_dev":          col.std_dev,
         "top_values":       top,
         "sample_values":    samples,
-        "last_profiled_at": col.last_profiled_at.isoformat() if col.last_profiled_at else None,
+        "last_profiled_at": col.last_profiled_at.isoformat() + 'Z' if col.last_profiled_at else None,
         "updated_at":       col.updated_at.isoformat() if col.updated_at else None,
     }
 
@@ -173,8 +178,8 @@ async def _run_column_profile(job_id: str, asset_id: str) -> None:
                 ]
                 if is_numeric:
                     parts += [
-                        f'AVG(TRY_TO_NUMBER("{col_name}"))    AS "{k}__avg"',
-                        f'STDDEV(TRY_TO_NUMBER("{col_name}")) AS "{k}__std"',
+                        f'AVG("{col_name}")    AS "{k}__avg"',
+                        f'STDDEV("{col_name}") AS "{k}__std"',
                     ]
             # For complex columns: only null count
             for col_name, _, _, _ in complex_cols:
@@ -223,6 +228,7 @@ async def _run_column_profile(job_id: str, asset_id: str) -> None:
             # ── Step 5: upsert all column_metadata rows — single commit ───────
             now = _now()
             all_cols = simple_cols + complex_cols
+            profile_date = date.today()
 
             existing_map: dict[str, ColumnMetadata] = {}
             ex_res = await db.execute(
@@ -231,6 +237,8 @@ async def _run_column_profile(job_id: str, asset_id: str) -> None:
             for rec in ex_res.scalars().all():
                 existing_map[rec.column_name] = rec
 
+            history_rows: list[dict] = []
+
             for col_name, data_type, is_nullable, ordinal in all_cols:
                 is_numeric, is_complex = _classify(data_type)
                 k = col_name.lower()
@@ -238,6 +246,7 @@ async def _run_column_profile(job_id: str, asset_id: str) -> None:
                 null_count   = int(stats_row.get(f"{k}__nc") or 0)
                 unique_count = int(stats_row.get(f"{k}__uc") or 0) if not is_complex else 0
                 cardinality  = round(unique_count / total_rows * 100, 2) if (total_rows > 0 and not is_complex) else None
+                top_val      = top_by_col.get(col_name, json.dumps([])) if not is_complex else None
 
                 col_rec = existing_map.get(col_name) or ColumnMetadata(
                     col_id=str(uuid.uuid4()), asset_id=asset_id, column_name=col_name
@@ -255,10 +264,23 @@ async def _run_column_profile(job_id: str, asset_id: str) -> None:
                 col_rec.max_value        = stats_row.get(f"{k}__max") if not is_complex else None
                 col_rec.avg_value        = stats_row.get(f"{k}__avg") if is_numeric else None
                 col_rec.std_dev          = stats_row.get(f"{k}__std") if is_numeric else None
-                col_rec.top_values       = top_by_col.get(col_name, json.dumps([]))
+                col_rec.top_values       = top_val if top_val is not None else json.dumps([])
                 col_rec.sample_values    = json.dumps(samples_by_col.get(col_name, []))
                 col_rec.last_profiled_at = now
                 col_rec.updated_by       = "profiler"
+
+                history_rows.append({
+                    "history_id":    str(uuid.uuid4()),
+                    "asset_id":      asset_id,
+                    "column_name":   col_name,
+                    "profile_date":  profile_date,
+                    "null_count":    null_count,
+                    "unique_count":  unique_count if not is_complex else None,
+                    "row_count":     total_rows,
+                    "cardinality_pct": cardinality,
+                    "top_values":    top_val,
+                    "created_at":    now,
+                })
 
                 job_tracker.append_result(
                     job_id,
@@ -266,7 +288,23 @@ async def _run_column_profile(job_id: str, asset_id: str) -> None:
                     success=True,
                 )
 
-            await db.commit()  # single commit for all columns
+            # Upsert history — one snapshot per column per day
+            if history_rows:
+                hist_stmt = pg_insert(ColumnProfileHistory).values(history_rows)
+                hist_stmt = hist_stmt.on_conflict_do_update(
+                    constraint="uq_col_profile_history",
+                    set_={
+                        "null_count":      hist_stmt.excluded.null_count,
+                        "unique_count":    hist_stmt.excluded.unique_count,
+                        "row_count":       hist_stmt.excluded.row_count,
+                        "cardinality_pct": hist_stmt.excluded.cardinality_pct,
+                        "top_values":      hist_stmt.excluded.top_values,
+                        "created_at":      hist_stmt.excluded.created_at,
+                    },
+                )
+                await db.execute(hist_stmt)
+
+            await db.commit()  # single commit for all columns + history
 
         job_tracker.mark_completed(job_id)
         logger.info("Column profiling job %s completed for asset %s (%d columns)", job_id, asset_id, len(col_info))
@@ -310,3 +348,102 @@ async def get_profile_status(
     if job.get("meta", {}).get("asset_id") != asset_id:
         raise HTTPException(403, "Job does not belong to this asset")
     return job
+
+
+def _serialize_history(rows: list[ColumnProfileHistory]) -> list[dict]:
+    out = []
+    for r in rows:
+        null_pct = round(r.null_count / r.row_count * 100, 2) if (r.null_count is not None and r.row_count) else None
+        out.append({
+            "column_name":    r.column_name,
+            "profile_date":   r.profile_date.isoformat(),
+            "null_pct":       null_pct,
+            "cardinality_pct": r.cardinality_pct,
+            "row_count":      r.row_count,
+            "top_values":     json.loads(r.top_values) if r.top_values else [],
+        })
+    return out
+
+
+@router.get("/{asset_id}/columns/profile-history")
+async def get_profile_history(
+    asset_id: str,
+    days: int = Query(default=90, ge=1, le=365),
+    column: Optional[str] = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    """Return per-day profile snapshots for all columns (or one column) in the given window."""
+    since = date.today() - timedelta(days=days)
+    q = (
+        select(ColumnProfileHistory)
+        .where(
+            ColumnProfileHistory.asset_id == asset_id,
+            ColumnProfileHistory.profile_date >= since,
+        )
+        .order_by(ColumnProfileHistory.column_name, ColumnProfileHistory.profile_date)
+    )
+    if column:
+        q = q.where(ColumnProfileHistory.column_name == column)
+    rows = (await db.execute(q)).scalars().all()
+    return _serialize_history(rows)
+
+
+@router.get("/{asset_id}/columns/profile-history/summary")
+async def get_profile_history_summary(
+    asset_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    """Return latest vs previous snapshot per column with drift_detected flag."""
+    dates_q = (
+        select(ColumnProfileHistory.profile_date)
+        .where(ColumnProfileHistory.asset_id == asset_id)
+        .distinct()
+        .order_by(ColumnProfileHistory.profile_date.desc())
+        .limit(2)
+    )
+    dates = (await db.execute(dates_q)).scalars().all()
+    if not dates:
+        return []
+
+    rows_q = select(ColumnProfileHistory).where(
+        ColumnProfileHistory.asset_id == asset_id,
+        ColumnProfileHistory.profile_date.in_(dates),
+    )
+    rows = (await db.execute(rows_q)).scalars().all()
+
+    by_col: dict[str, list[ColumnProfileHistory]] = defaultdict(list)
+    for r in rows:
+        by_col[r.column_name].append(r)
+    for snaps in by_col.values():
+        snaps.sort(key=lambda x: x.profile_date, reverse=True)
+
+    summary: list[dict] = []
+    for col_name, snaps in by_col.items():
+        latest = snaps[0]
+        prev   = snaps[1] if len(snaps) > 1 else None
+
+        latest_null_pct = round(latest.null_count / latest.row_count * 100, 2) if (latest.null_count is not None and latest.row_count) else None
+        prev_null_pct   = round(prev.null_count / prev.row_count * 100, 2) if (prev and prev.null_count is not None and prev.row_count) else None
+        null_delta      = round(latest_null_pct - prev_null_pct, 2) if (latest_null_pct is not None and prev_null_pct is not None) else None
+        card_delta      = round((latest.cardinality_pct or 0) - (prev.cardinality_pct or 0), 2) if prev else None
+
+        drift = bool(
+            (null_delta is not None and abs(null_delta) > DRIFT_NULL_PCT_THRESHOLD) or
+            (card_delta is not None and abs(card_delta) > DRIFT_CARDINALITY_THRESHOLD)
+        )
+
+        summary.append({
+            "column_name":           col_name,
+            "snapshots_count":       len(snaps),
+            "latest_null_pct":       latest_null_pct,
+            "prev_null_pct":         prev_null_pct,
+            "null_pct_delta":        null_delta,
+            "latest_cardinality_pct": latest.cardinality_pct,
+            "prev_cardinality_pct":  prev.cardinality_pct if prev else None,
+            "cardinality_delta":     card_delta,
+            "drift_detected":        drift,
+        })
+
+    return summary

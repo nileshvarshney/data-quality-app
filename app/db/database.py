@@ -41,6 +41,7 @@ async def create_tables():
         migrations = [
             # Column additions
             "ALTER TABLE data_assets ADD COLUMN IF NOT EXISTS connection_id VARCHAR(36)",
+            "ALTER TABLE data_assets ADD COLUMN IF NOT EXISTS view_definition TEXT",
             "ALTER TABLE snowflake_connections ADD COLUMN IF NOT EXISTS default_schema VARCHAR(200)",
             "ALTER TABLE dq_schedules ADD COLUMN IF NOT EXISTS run_at_hour INTEGER",
             "ALTER TABLE dq_schedules ADD COLUMN IF NOT EXISTS run_at_minute INTEGER",
@@ -143,6 +144,21 @@ async def create_tables():
                 UNIQUE (asset_id, column_name)
             )""",
             "CREATE INDEX IF NOT EXISTS ix_col_meta_asset ON column_metadata(asset_id)",
+            """CREATE TABLE IF NOT EXISTS column_profile_history (
+                history_id VARCHAR(36) PRIMARY KEY,
+                asset_id VARCHAR(36) NOT NULL REFERENCES data_assets(asset_id) ON DELETE CASCADE,
+                column_name VARCHAR(255) NOT NULL,
+                profile_date DATE NOT NULL,
+                null_count BIGINT,
+                unique_count BIGINT,
+                row_count BIGINT,
+                cardinality_pct FLOAT,
+                top_values TEXT,
+                created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                UNIQUE (asset_id, column_name, profile_date)
+            )""",
+            "CREATE INDEX IF NOT EXISTS ix_col_profile_history_asset_date ON column_profile_history(asset_id, profile_date)",
+            "CREATE INDEX IF NOT EXISTS ix_col_profile_history_asset_col_date ON column_profile_history(asset_id, column_name, profile_date)",
             """CREATE TABLE IF NOT EXISTS data_products (
                 product_id VARCHAR(36) PRIMARY KEY,
                 product_name VARCHAR(200) NOT NULL,
@@ -405,24 +421,7 @@ async def create_tables():
                 created_by VARCHAR(200),
                 updated_at TIMESTAMP NOT NULL DEFAULT NOW()
             )""",
-            """CREATE TABLE IF NOT EXISTS data_lineage (
-                lineage_id VARCHAR(36) PRIMARY KEY,
-                upstream_asset_id VARCHAR(36) REFERENCES data_assets(asset_id),
-                downstream_asset_id VARCHAR(36) REFERENCES data_assets(asset_id),
-                lineage_type VARCHAR(30),
-                downstream_name VARCHAR(200),
-                downstream_type VARCHAR(50),
-                transformation_sql TEXT,
-                description TEXT,
-                owner_email VARCHAR(200),
-                is_critical BOOLEAN NOT NULL DEFAULT FALSE,
-                created_by VARCHAR(200),
-                created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-                updated_at TIMESTAMP NOT NULL DEFAULT NOW()
-            )""",
-            "CREATE INDEX IF NOT EXISTS ix_lineage_upstream ON data_lineage(upstream_asset_id)",
-            "CREATE INDEX IF NOT EXISTS ix_lineage_downstream ON data_lineage(downstream_asset_id)",
-            """CREATE TABLE IF NOT EXISTS data_sharing_agreements (
+"""CREATE TABLE IF NOT EXISTS data_sharing_agreements (
                 agreement_id VARCHAR(36) PRIMARY KEY,
                 producer_domain_id VARCHAR(36) NOT NULL REFERENCES domains(domain_id),
                 consumer_domain_id VARCHAR(36) NOT NULL REFERENCES domains(domain_id),
@@ -447,9 +446,40 @@ async def create_tables():
                 created_at TIMESTAMP NOT NULL DEFAULT NOW(),
                 UNIQUE (asset_id, column_name)
             )""",
+            # Schema drift detection
+            "ALTER TABLE dq_alerts ALTER COLUMN run_id DROP NOT NULL",
+            "ALTER TABLE dq_alerts ALTER COLUMN rule_id DROP NOT NULL",
+            "ALTER TABLE dq_alerts ADD COLUMN IF NOT EXISTS alert_type VARCHAR(30) NOT NULL DEFAULT 'rule_failure'",
+            "ALTER TABLE dq_alerts ADD COLUMN IF NOT EXISTS drift_asset_id VARCHAR(36)",
+            """CREATE TABLE IF NOT EXISTS schema_baselines (
+                baseline_id  VARCHAR(36) PRIMARY KEY,
+                asset_id     VARCHAR(36) NOT NULL REFERENCES data_assets(asset_id) ON DELETE CASCADE,
+                status       VARCHAR(20) NOT NULL DEFAULT 'active',
+                columns_snapshot JSON,
+                approved_by  VARCHAR(36),
+                approved_at  TIMESTAMP,
+                created_at   TIMESTAMP NOT NULL DEFAULT NOW()
+            )""",
+            "CREATE INDEX IF NOT EXISTS ix_schema_baselines_asset_status ON schema_baselines(asset_id, status)",
+            """CREATE TABLE IF NOT EXISTS schema_drift_events (
+                event_id     VARCHAR(36) PRIMARY KEY,
+                asset_id     VARCHAR(36) NOT NULL REFERENCES data_assets(asset_id) ON DELETE CASCADE,
+                baseline_id  VARCHAR(36) NOT NULL REFERENCES schema_baselines(baseline_id),
+                detected_at  TIMESTAMP NOT NULL DEFAULT NOW(),
+                change_type  VARCHAR(30) NOT NULL,
+                column_name  VARCHAR(200) NOT NULL,
+                old_value    VARCHAR(500),
+                new_value    VARCHAR(500),
+                status       VARCHAR(20) NOT NULL DEFAULT 'open',
+                resolved_at  TIMESTAMP,
+                resolved_by  VARCHAR(36)
+            )""",
+            "CREATE INDEX IF NOT EXISTS ix_drift_events_asset_status ON schema_drift_events(asset_id, status)",
         ]
         for sql in migrations:
             try:
                 await conn.execute(__import__('sqlalchemy').text(sql))
             except Exception:
                 pass
+
+
