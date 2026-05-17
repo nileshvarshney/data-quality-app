@@ -288,11 +288,13 @@ class DQAlert(Base):
     __tablename__ = "dq_alerts"
 
     alert_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
-    run_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    rule_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    rule_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     domain_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     subdomain_id: Mapped[str] = mapped_column(String(36), nullable=False)
     asset_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    alert_type: Mapped[str] = mapped_column(String(30), nullable=False, default="rule_failure")
+    drift_asset_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     severity: Mapped[str] = mapped_column(String(20), nullable=False)
     alert_status: Mapped[str] = mapped_column(String(20), default="open", index=True)
     alert_message: Mapped[str | None] = mapped_column(Text)
@@ -303,6 +305,40 @@ class DQAlert(Base):
     acknowledged_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class SchemaBaseline(Base):
+    __tablename__ = "schema_baselines"
+    __table_args__ = (
+        Index("ix_schema_baselines_asset_status", "asset_id", "status"),
+    )
+
+    baseline_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    asset_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_assets.asset_id", ondelete="CASCADE"), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    columns_snapshot: Mapped[list | None] = mapped_column(JSON)
+    approved_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class SchemaDriftEvent(Base):
+    __tablename__ = "schema_drift_events"
+    __table_args__ = (
+        Index("ix_drift_events_asset_status", "asset_id", "status"),
+    )
+
+    event_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    asset_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_assets.asset_id", ondelete="CASCADE"), nullable=False)
+    baseline_id: Mapped[str] = mapped_column(String(36), ForeignKey("schema_baselines.baseline_id"), nullable=False)
+    detected_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    change_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    column_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    old_value: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    new_value: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="open")
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    resolved_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
 
 
 class SnowflakeConnection(Base):

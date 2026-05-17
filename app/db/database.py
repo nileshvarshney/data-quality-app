@@ -446,6 +446,35 @@ async def create_tables():
                 created_at TIMESTAMP NOT NULL DEFAULT NOW(),
                 UNIQUE (asset_id, column_name)
             )""",
+            # Schema drift detection
+            "ALTER TABLE dq_alerts ALTER COLUMN run_id DROP NOT NULL",
+            "ALTER TABLE dq_alerts ALTER COLUMN rule_id DROP NOT NULL",
+            "ALTER TABLE dq_alerts ADD COLUMN IF NOT EXISTS alert_type VARCHAR(30) NOT NULL DEFAULT 'rule_failure'",
+            "ALTER TABLE dq_alerts ADD COLUMN IF NOT EXISTS drift_asset_id VARCHAR(36)",
+            """CREATE TABLE IF NOT EXISTS schema_baselines (
+                baseline_id  VARCHAR(36) PRIMARY KEY,
+                asset_id     VARCHAR(36) NOT NULL REFERENCES data_assets(asset_id) ON DELETE CASCADE,
+                status       VARCHAR(20) NOT NULL DEFAULT 'active',
+                columns_snapshot JSON,
+                approved_by  VARCHAR(36),
+                approved_at  TIMESTAMP,
+                created_at   TIMESTAMP NOT NULL DEFAULT NOW()
+            )""",
+            "CREATE INDEX IF NOT EXISTS ix_schema_baselines_asset_status ON schema_baselines(asset_id, status)",
+            """CREATE TABLE IF NOT EXISTS schema_drift_events (
+                event_id     VARCHAR(36) PRIMARY KEY,
+                asset_id     VARCHAR(36) NOT NULL REFERENCES data_assets(asset_id) ON DELETE CASCADE,
+                baseline_id  VARCHAR(36) NOT NULL REFERENCES schema_baselines(baseline_id),
+                detected_at  TIMESTAMP NOT NULL DEFAULT NOW(),
+                change_type  VARCHAR(30) NOT NULL,
+                column_name  VARCHAR(200) NOT NULL,
+                old_value    VARCHAR(500),
+                new_value    VARCHAR(500),
+                status       VARCHAR(20) NOT NULL DEFAULT 'open',
+                resolved_at  TIMESTAMP,
+                resolved_by  VARCHAR(36)
+            )""",
+            "CREATE INDEX IF NOT EXISTS ix_drift_events_asset_status ON schema_drift_events(asset_id, status)",
         ]
         for sql in migrations:
             try:
