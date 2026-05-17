@@ -220,6 +220,8 @@ export default function TableDashboardPage() {
 
   const [glossaryTerms, setGlossaryTerms] = useState<any[]>([])
   const [lineageObjectId, setLineageObjectId] = useState<string | null>(null)
+  const [lineageAllObjects, setLineageAllObjects] = useState<any[]>([])
+  const [lineagePickerSearch, setLineagePickerSearch] = useState('')
 
   const tableLastProfiledAt = useMemo(
     () => columns
@@ -265,19 +267,21 @@ export default function TableDashboardPage() {
     }
   }, [activeTab, assetId, colFetched])
 
-  // Look up lineage objectId by table name when lineage tab is opened
+  // Look up lineage objectId by table name when lineage tab is opened, and load all objects for picker
   useEffect(() => {
-    if (activeTab !== 'lineage' || !data?.sf_table_name) return
+    if (activeTab !== 'lineage') return
+    // Fetch all available lineage objects for the picker
+    lineageApi.search({})
+      .then((res: any) => setLineageAllObjects(res.data?.results ?? []))
+      .catch(() => {})
+    // Try to auto-match by table name
+    if (!data?.sf_table_name) return
     lineageApi.search({ q: data.sf_table_name })
       .then((res: any) => {
         const results = res.data?.results ?? []
-        if (results.length > 0) {
-          setLineageObjectId(results[0].object_id)
-        } else {
-          setLineageObjectId(null)
-        }
+        if (results.length > 0) setLineageObjectId(results[0].object_id)
       })
-      .catch(() => setLineageObjectId(null))
+      .catch(() => {})
   }, [activeTab, data?.sf_table_name])
 
   const handleCertify = async (status: string) => {
@@ -1008,13 +1012,52 @@ export default function TableDashboardPage() {
           </div>
 
           {lineageObjectId ? (
-            <LineageGraph objectId={lineageObjectId} />
+            <>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs text-slate-400">Viewing lineage for <span className="font-semibold text-slate-200">{lineageAllObjects.find(o => o.object_id === lineageObjectId)?.object_name ?? lineageObjectId}</span></span>
+                <button onClick={() => setLineageObjectId(null)} className="text-xs text-indigo-400 hover:underline">Browse all objects</button>
+              </div>
+              <LineageGraph objectId={lineageObjectId} />
+            </>
           ) : (
-            <div className="flex flex-col items-center justify-center h-64 gap-3 text-slate-500">
-              <p className="text-sm">No lineage data available for this object.</p>
-              <p className="text-xs text-slate-600">
-                Lineage tracks relationships between TABLE, VIEW, and MATERIALIZED VIEW objects.
+            <div className="bg-slate-900 rounded-xl border border-slate-700 p-6">
+              <p className="text-sm font-semibold text-slate-200 mb-1">Select a lineage object to explore</p>
+              <p className="text-xs text-slate-400 mb-4">
+                {data?.sf_table_name
+                  ? `No lineage object matched "${data.sf_table_name}". Pick one below.`
+                  : 'Browse available tables, views, and materialized views.'}
               </p>
+              <input
+                type="text"
+                placeholder="Search by name…"
+                value={lineagePickerSearch}
+                onChange={e => setLineagePickerSearch(e.target.value)}
+                className="w-full mb-3 px-3 py-2 text-sm bg-slate-800 border border-slate-600 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+              <div className="space-y-1.5 max-h-72 overflow-y-auto">
+                {lineageAllObjects
+                  .filter(o => !lineagePickerSearch || o.object_name.toLowerCase().includes(lineagePickerSearch.toLowerCase()))
+                  .map(obj => (
+                    <button
+                      key={obj.object_id}
+                      onClick={() => setLineageObjectId(obj.object_id)}
+                      className="w-full text-left px-3 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-indigo-500 transition-colors flex items-center gap-3"
+                    >
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
+                        obj.object_type === 'TABLE' ? 'bg-blue-900 text-blue-300' :
+                        obj.object_type === 'VIEW' ? 'bg-purple-900 text-purple-300' :
+                        'bg-green-900 text-green-300'
+                      }`}>
+                        {obj.object_type === 'MATERIALIZED_VIEW' ? 'MV' : obj.object_type}
+                      </span>
+                      <span className="text-sm text-slate-200 font-medium">{obj.object_name}</span>
+                      <span className="text-xs text-slate-500 ml-auto">{obj.schema_name}</span>
+                    </button>
+                  ))}
+                {lineageAllObjects.length === 0 && (
+                  <p className="text-xs text-slate-500 text-center py-6">No lineage objects found. Restart the API to seed sample data.</p>
+                )}
+              </div>
             </div>
           )}
         </div>
