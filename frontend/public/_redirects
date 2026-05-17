@@ -1,0 +1,7 @@
+# SPA fallback: serve pre-built shell for dynamic routes.
+# Next.js client-side router reads the real browser URL, so useParams()
+# returns the actual ID even though Cloudflare serves the placeholder HTML.
+/rules/*                          /rules/__placeholder__/index.html                        200
+/dashboard/domains/*              /dashboard/domains/__placeholder__/index.html            200
+/dashboard/subdomains/*           /dashboard/subdomains/__placeholder__/index.html        200
+/dashboard/tables/*               /dashboard/tables/__placeholder__/index.html             200
