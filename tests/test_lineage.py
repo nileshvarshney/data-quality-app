@@ -17,6 +17,7 @@ def test_cte():
     refs = extract_table_refs(sql)
     assert "RAW_ORDERS" in refs
     assert "PRODUCTS" in refs
+    assert "BASE" not in refs  # CTE alias must be excluded
 
 
 def test_schema_qualified_name():

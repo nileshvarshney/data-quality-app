@@ -18,15 +18,19 @@ router = APIRouter(prefix="/lineage", tags=["Lineage"])
 
 
 def extract_table_refs(view_sql: str) -> list[str]:
-    """Return upper-cased table names from every FROM/JOIN in the view SQL."""
+    """Return upper-cased table names from every FROM/JOIN in the view SQL, excluding CTE aliases."""
     if not view_sql:
         return []
     try:
         tree = sqlglot.parse_one(view_sql, dialect="snowflake")
     except Exception:
         return []
+    # Collect CTE alias names so we can exclude them
+    cte_names: set[str] = {
+        cte.alias.upper() for cte in tree.find_all(exp.CTE) if cte.alias
+    }
     refs: set[str] = set()
     for table in tree.find_all(exp.Table):
-        if table.name:
+        if table.name and table.name.upper() not in cte_names:
             refs.add(table.name.upper())
     return list(refs)
