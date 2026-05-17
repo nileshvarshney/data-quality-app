@@ -64,15 +64,6 @@ interface SFConnection {
   created_at: string; updated_at: string
 }
 
-interface PlatformInfo {
-  account: string
-  user: string
-  warehouse: string
-  role: string
-  app_database: string
-  app_schema: string
-  has_password: boolean
-}
 
 const MASKED = '***MASKED***'
 
@@ -594,7 +585,7 @@ function SnowflakeTab() {
   const handleTest = async () => {
     setTestStatus({ status: 'testing', message: '' })
     try {
-      const res = await configApi.testSnowflake()
+      const res = await configApi.testPlatformConnection()
       const d = res.data
       setTestStatus({ status: d.status === 'ok' ? 'ok' : 'error', message: d.message })
     } catch (e: any) {
@@ -1380,8 +1371,8 @@ export default function SettingsPage() {
   const [oauthTest, setOauthTest]       = useState<TestStatus>({ status: 'idle', message: '' })
   const { setTimezone } = useTimezone()
 
-  // Platform connection info (read-only, from env vars)
-  const [platformInfo, setPlatformInfo] = useState<PlatformInfo | null>(null)
+  // Platform connection test status
+  const [platformTestStatus, setPlatformTestStatus] = useState<TestStatus>({ status: 'idle', message: '' })
 
   // Target database state
   const [primaryTarget, setPrimaryTargetState] = useState<SFConnection | null>(null)
@@ -1417,13 +1408,6 @@ export default function SettingsPage() {
   }, [])
 
   useEffect(() => { load() }, [load])
-
-  useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/config/platform-info`)
-      .then(r => r.json())
-      .then(data => setPlatformInfo(data))
-      .catch(() => {})
-  }, [])
 
   const set = (key: string, value: string) => {
     setEdits(e => ({ ...e, [key]: value }))
@@ -1585,35 +1569,57 @@ export default function SettingsPage() {
           {/* ── Platform Connection ── */}
           {activeTab === 'platform_connection' && (
             <div className="space-y-6">
-              <div className="flex gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800 mb-5">
-                <Info size={14} className="mt-0.5 shrink-0" />
-                <span>
-                  These credentials are sourced from environment variables (<code className="font-mono bg-blue-100 px-1 rounded">SF_PLATFORM_*</code>) and
-                  cannot be edited here. Update them in your shell, <code className="font-mono bg-blue-100 px-1 rounded">docker-compose.yml</code>, or secrets manager.
-                </span>
-              </div>
-              {platformInfo ? (
-                <div className="grid grid-cols-2 gap-4">
-                  {[
-                    { label: 'Account',      value: platformInfo.account },
-                    { label: 'User',         value: platformInfo.user },
-                    { label: 'Warehouse',    value: platformInfo.warehouse },
-                    { label: 'Role',         value: platformInfo.role },
-                    { label: 'App Database', value: platformInfo.app_database },
-                    { label: 'App Schema',   value: platformInfo.app_schema },
-                    { label: 'Password',     value: platformInfo.has_password ? '●●●●●●●●' : 'Not set' },
-                  ].map(({ label, value }) => (
-                    <div key={label}>
-                      <p className="text-xs text-gray-500 mb-1">{label}</p>
-                      <p className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-mono text-gray-700">
-                        {value}
-                      </p>
-                    </div>
-                  ))}
+              <SectionNote>
+                These are the Snowflake credentials used by the platform to store its own tables (rules, runs, users, etc.).
+                Changes take effect after restarting the server.
+              </SectionNote>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <FieldLabel label="Account" hint="e.g. myorg-myaccount or xy12345.us-east-1.aws" />
+                  <input className={inputCls} value={edits['sf_platform_account'] ?? ''} onChange={e => set('sf_platform_account', e.target.value)} placeholder="myorg-myaccount" />
                 </div>
-              ) : (
-                <div className="text-sm text-gray-400">Loading platform info…</div>
-              )}
+                <div>
+                  <FieldLabel label="User" hint="Service account username" />
+                  <input className={inputCls} value={edits['sf_platform_user'] ?? ''} onChange={e => set('sf_platform_user', e.target.value)} placeholder="dq_platform_user" />
+                </div>
+                <div>
+                  <FieldLabel label="Password" hint="Leave blank to keep existing" />
+                  <SecretInput value={edits['sf_platform_password'] ?? ''} onChange={v => set('sf_platform_password', v)} placeholder="(unchanged)" />
+                </div>
+                <div>
+                  <FieldLabel label="Warehouse" />
+                  <input className={inputCls} value={edits['sf_platform_warehouse'] ?? ''} onChange={e => set('sf_platform_warehouse', e.target.value)} placeholder="COMPUTE_WH" />
+                </div>
+                <div>
+                  <FieldLabel label="Role" hint="Optional — uses account default if blank" />
+                  <input className={inputCls} value={edits['sf_platform_role'] ?? ''} onChange={e => set('sf_platform_role', e.target.value)} placeholder="ACCOUNTADMIN" />
+                </div>
+                <div>
+                  <FieldLabel label="App Database" hint="Database where platform tables live" />
+                  <input className={inputCls} value={edits['snowflake_app_database'] ?? ''} onChange={e => set('snowflake_app_database', e.target.value)} placeholder="DQ_PLATFORM_DB" />
+                </div>
+                <div>
+                  <FieldLabel label="App Schema" />
+                  <input className={inputCls} value={edits['snowflake_app_schema'] ?? ''} onChange={e => set('snowflake_app_schema', e.target.value)} placeholder="DQ_APP" />
+                </div>
+              </div>
+              <div className="flex items-center gap-3 pt-2">
+                <SaveBar saving={saving} saved={saved} onSave={handleSave} />
+                <button
+                  onClick={async () => {
+                    setPlatformTestStatus({ status: 'testing', message: '' })
+                    try {
+                      const res = await configApi.testPlatformConnection()
+                      setPlatformTestStatus({ status: res.data.status, message: res.data.message })
+                    } catch (e: any) {
+                      setPlatformTestStatus({ status: 'error', message: e.message })
+                    }
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600">
+                  <Wifi size={14} /> Test Connection
+                </button>
+              </div>
+              <TestBanner status={platformTestStatus} />
             </div>
           )}
 

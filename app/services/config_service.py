@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.db.models import AppConfig
 from app.core.encryption import encrypt, decrypt
+from app.core.config import settings
 
 logger = logging.getLogger("dq_platform.config")
 
@@ -18,9 +19,14 @@ CONFIG_DEFAULTS: list[dict] = [
     {"category": "general", "key": "debug", "value": "true", "is_secret": False, "description": "Enable verbose SQL query logging (true/false)"},
     {"category": "general", "key": "display_timezone", "value": "America/Los_Angeles", "is_secret": False, "description": "Timezone used to display all timestamps across the UI"},
 
-    # Snowflake — app database (platform tables)
-    {"category": "database", "key": "snowflake_app_database", "value": "DQ_PLATFORM_DB", "is_secret": False, "description": "Snowflake database where platform tables (rules, runs, users, etc.) are stored"},
-    {"category": "database", "key": "snowflake_app_schema",   "value": "DQ_APP",          "is_secret": False, "description": "Snowflake schema within the app database"},
+    # Platform Snowflake connection (app's own tables — seeded from env vars on first boot)
+    {"category": "platform_connection", "key": "sf_platform_account",   "value": settings.sf_platform_account,  "is_secret": False, "description": "Snowflake account identifier for the platform DB (e.g. myorg-myaccount)"},
+    {"category": "platform_connection", "key": "sf_platform_user",      "value": settings.sf_platform_user,     "is_secret": False, "description": "Snowflake username for the platform service account"},
+    {"category": "platform_connection", "key": "sf_platform_password",  "value": settings.sf_platform_password, "is_secret": True,  "description": "Snowflake password for the platform service account"},
+    {"category": "platform_connection", "key": "sf_platform_warehouse", "value": settings.sf_platform_warehouse,"is_secret": False, "description": "Snowflake warehouse used by the platform"},
+    {"category": "platform_connection", "key": "sf_platform_role",      "value": settings.sf_platform_role,     "is_secret": False, "description": "Snowflake role for the platform service account"},
+    {"category": "platform_connection", "key": "snowflake_app_database","value": settings.snowflake_app_database,"is_secret": False, "description": "Database where platform tables (rules, runs, users, etc.) are stored"},
+    {"category": "platform_connection", "key": "snowflake_app_schema",  "value": settings.snowflake_app_schema, "is_secret": False, "description": "Schema within the platform database"},
 
     # LLM
     {"category": "llm", "key": "llm_provider", "value": "ollama", "is_secret": False, "description": "Active LLM provider: ollama, openai, claude, gemini_flash"},

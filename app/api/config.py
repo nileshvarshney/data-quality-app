@@ -10,7 +10,7 @@ from app.core.config import settings
 logger = logging.getLogger("dq_platform.config")
 router = APIRouter(prefix="/config", tags=["Configuration"])
 
-VALID_CATEGORIES = {"general", "database", "snowflake", "llm", "scheduler"}
+VALID_CATEGORIES = {"general", "platform_connection", "llm", "scheduler"}
 
 
 @router.get("/public/display-timezone", include_in_schema=True)
@@ -21,17 +21,53 @@ async def get_display_timezone(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/platform-info")
-async def get_platform_info():
-    """Return non-sensitive platform Snowflake connection info (sourced from env vars)."""
-    return {
-        "account": settings.sf_platform_account or "(not set)",
-        "user": settings.sf_platform_user or "(not set)",
-        "warehouse": settings.sf_platform_warehouse,
-        "role": settings.sf_platform_role,
-        "app_database": settings.snowflake_app_database,
-        "app_schema": settings.snowflake_app_schema,
-        "has_password": bool(settings.sf_platform_password),
-    }
+async def get_platform_info(db: AsyncSession = Depends(get_db)):
+    """Return platform Snowflake connection config (from AppConfig, editable in UI)."""
+    keys = ["sf_platform_account", "sf_platform_user", "sf_platform_password",
+            "sf_platform_warehouse", "sf_platform_role",
+            "snowflake_app_database", "snowflake_app_schema"]
+    data: dict = {}
+    for k in keys:
+        val = await config_service.get_value(k, db)
+        if k == "sf_platform_password":
+            data["has_password"] = bool(val)
+        else:
+            data[k] = val or ""
+    return data
+
+
+@router.post("/test/platform-connection")
+async def test_platform_connection(db: AsyncSession = Depends(get_db)):
+    """Test the platform Snowflake connection using credentials stored in AppConfig."""
+    account  = await config_service.get_value("sf_platform_account", db)
+    user     = await config_service.get_value("sf_platform_user", db)
+    password = await config_service.get_value("sf_platform_password", db)
+    warehouse= await config_service.get_value("sf_platform_warehouse", db)
+    role     = await config_service.get_value("sf_platform_role", db)
+
+    if not account or not user or not password:
+        return {"status": "error", "message": "Account, user, and password are required"}
+
+    try:
+        import snowflake.connector
+        kwargs = dict(account=account, user=user, password=password,
+                      warehouse=warehouse or "COMPUTE_WH")
+        if role:
+            kwargs["role"] = role
+        conn = snowflake.connector.connect(**kwargs)
+        cur = conn.cursor()
+        cur.execute("SELECT CURRENT_VERSION(), CURRENT_ROLE(), CURRENT_WAREHOUSE()")
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        return {
+            "status": "ok",
+            "message": f"Connected successfully (Snowflake {row[0]})",
+            "role": row[1],
+            "warehouse": row[2],
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 
 class ConfigUpdate(BaseModel):
