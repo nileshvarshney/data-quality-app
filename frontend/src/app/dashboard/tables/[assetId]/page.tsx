@@ -8,7 +8,7 @@ import {
   FileText, Bot, Database, GitBranch,
   Columns, Star, Tag, BookOpen, Zap, Pencil, EyeOff, TrendingUp,
 } from 'lucide-react'
-import { dashboardApi, executionsApi, aiApi, assetsApi, glossaryApi } from '@/services/apiClient'
+import { dashboardApi, executionsApi, aiApi, assetsApi, glossaryApi, lineageApi } from '@/services/apiClient'
 import { profilingApi } from '@/services/profilingApi'
 import QualityTrendChart from '@/components/charts/QualityTrendChart'
 import ProfileTrendsTab from '@/components/profiling/ProfileTrendsTab'
@@ -219,6 +219,7 @@ export default function TableDashboardPage() {
   const [certifying, setCertifying] = useState(false)
 
   const [glossaryTerms, setGlossaryTerms] = useState<any[]>([])
+  const [lineageObjectId, setLineageObjectId] = useState<string | null>(null)
 
   const tableLastProfiledAt = useMemo(
     () => columns
@@ -263,6 +264,21 @@ export default function TableDashboardPage() {
       }).finally(() => { setColLoading(false); setColFetched(true) })
     }
   }, [activeTab, assetId, colFetched])
+
+  // Look up lineage objectId by table name when lineage tab is opened
+  useEffect(() => {
+    if (activeTab !== 'lineage' || !data?.sf_table_name) return
+    lineageApi.search({ q: data.sf_table_name })
+      .then((res: any) => {
+        const results = res.data?.results ?? []
+        if (results.length > 0) {
+          setLineageObjectId(results[0].object_id)
+        } else {
+          setLineageObjectId(null)
+        }
+      })
+      .catch(() => setLineageObjectId(null))
+  }, [activeTab, data?.sf_table_name])
 
   const handleCertify = async (status: string) => {
     setCertifyOpen(false); setCertifying(true)
@@ -991,7 +1007,16 @@ export default function TableDashboardPage() {
             </div>
           </div>
 
-          <LineageGraph objectId={assetId} />
+          {lineageObjectId ? (
+            <LineageGraph objectId={lineageObjectId} />
+          ) : (
+            <div className="flex flex-col items-center justify-center h-64 gap-3 text-slate-500">
+              <p className="text-sm">No lineage data available for this object.</p>
+              <p className="text-xs text-slate-600">
+                Lineage tracks relationships between TABLE, VIEW, and MATERIALIZED VIEW objects.
+              </p>
+            </div>
+          )}
         </div>
       )}
     </div>
