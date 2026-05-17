@@ -355,6 +355,7 @@ export const incidentsApi = {
 
 // Cost
 export const costApi = {
+  overview:     (params?: object) => api.get('/cost/overview', { params }),
   summary:      (params?: object) => api.get('/cost/summary', { params }),
   byDomain:     (params?: object) => api.get('/cost/by-domain', { params }),
   bySubdomain:  (params?: object) => api.get('/cost/by-subdomain', { params }),

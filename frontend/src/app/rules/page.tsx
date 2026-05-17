@@ -119,6 +119,10 @@ function EditRuleDrawer({ rule, onClose, onSaved }: {
   const [acceptedValuesStr, setAcceptedValuesStr] = useState(
     () => (rule.rule_config?.accepted_values as string[] || []).join(', ')
   )
+  // Local string state for expected_columns so commas can be typed freely
+  const [expectedColumnsStr, setExpectedColumnsStr] = useState(
+    () => (rule.rule_config?.expected_columns as string[] || []).join(', ')
+  )
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ status: string; score: number | null; error: string | null } | null>(null)
@@ -132,6 +136,7 @@ function EditRuleDrawer({ rule, onClose, onSaved }: {
       const cfg = r.data.rule_config || {}
       setConfigState(cfg)
       if (cfg.accepted_values) setAcceptedValuesStr((cfg.accepted_values as string[]).join(', '))
+      if (cfg.expected_columns) setExpectedColumnsStr((cfg.expected_columns as string[]).join(', '))
     })
   }, [rule.rule_id])
 
@@ -139,6 +144,7 @@ function EditRuleDrawer({ rule, onClose, onSaved }: {
     set('rule_type', newType)
     setConfigState({})
     setAcceptedValuesStr('')
+    setExpectedColumnsStr('')
     try {
       const res = await rulesApi.previewSql({
         rule_type: newType,
@@ -154,6 +160,9 @@ function EditRuleDrawer({ rule, onClose, onSaved }: {
     const finalConfig = { ...config }
     if (form.rule_type === 'accepted_values_check') {
       finalConfig.accepted_values = acceptedValuesStr.split(',').map((s: string) => s.trim()).filter(Boolean)
+    }
+    if (form.rule_type === 'schema_drift_check') {
+      finalConfig.expected_columns = expectedColumnsStr.split(',').map((s: string) => s.trim()).filter(Boolean)
     }
     return finalConfig
   }
@@ -296,9 +305,106 @@ function EditRuleDrawer({ rule, onClose, onSaved }: {
         return (
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Expected Columns</label>
-            <input className={inp} value={(config.expected_columns || []).join(', ')}
-              onChange={e => setCfg('expected_columns', e.target.value.split(',').map((s: string) => s.trim()).filter(Boolean))}
+            <input className={inp} value={expectedColumnsStr}
+              onChange={e => setExpectedColumnsStr(e.target.value)}
               placeholder="id, name, email, created_at" />
+          </div>
+        )
+      case 'semantic_consistency_check':
+        return (
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Consistency Condition</label>
+            <textarea className={`${inp} font-mono text-xs`} rows={2}
+              value={config.condition || ''}
+              onChange={e => setCfg('condition', e.target.value)}
+              placeholder="end_date >= start_date AND qty > 0" />
+            <p className="text-[10px] text-gray-400 mt-1">SQL expression that must be TRUE for valid rows</p>
+          </div>
+        )
+      case 'referential_sanity_check':
+        return (
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Sanity Condition</label>
+            <textarea className={`${inp} font-mono text-xs`} rows={2}
+              value={config.condition || ''}
+              onChange={e => setCfg('condition', e.target.value)}
+              placeholder="order_status IN ('OPEN','CLOSED','CANCELLED')" />
+            <p className="text-[10px] text-gray-400 mt-1">Rows matching this condition are considered invalid</p>
+          </div>
+        )
+      case 'business_metric_check':
+        return (
+          <div className="space-y-2">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Metric SQL *</label>
+              <input className={`${inp} font-mono text-xs`}
+                value={config.metric_sql || ''}
+                onChange={e => setCfg('metric_sql', e.target.value)}
+                placeholder="AVG(order_amount)" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Min Value</label>
+                <input type="number" className={inp}
+                  value={config.min_value ?? ''}
+                  onChange={e => setCfg('min_value', e.target.value === '' ? undefined : Number(e.target.value))}
+                  placeholder="50" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Max Value</label>
+                <input type="number" className={inp}
+                  value={config.max_value ?? ''}
+                  onChange={e => setCfg('max_value', e.target.value === '' ? undefined : Number(e.target.value))}
+                  placeholder="10000" />
+              </div>
+            </div>
+          </div>
+        )
+      case 'distribution_consistency_check':
+        return (
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Baseline Mean</label>
+                <input type="number" className={inp}
+                  value={config.baseline_mean ?? ''}
+                  onChange={e => setCfg('baseline_mean', e.target.value === '' ? undefined : Number(e.target.value))}
+                  placeholder="100.0" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Baseline Std Dev</label>
+                <input type="number" className={inp}
+                  value={config.baseline_std ?? ''}
+                  onChange={e => setCfg('baseline_std', e.target.value === '' ? undefined : Number(e.target.value))}
+                  placeholder="15.0" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Tolerance %</label>
+              <input type="number" className={inp}
+                value={config.tolerance_pct ?? 20}
+                onChange={e => setCfg('tolerance_pct', Number(e.target.value))}
+                placeholder="20" />
+            </div>
+          </div>
+        )
+      case 'llm_semantic_check':
+        return (
+          <div className="space-y-2">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Sample Size</label>
+              <input type="number" className={inp}
+                value={config.sample_size ?? 100}
+                onChange={e => setCfg('sample_size', Number(e.target.value))}
+                placeholder="100" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Validation Prompt</label>
+              <textarea className={`${inp} text-xs`} rows={3}
+                value={config.validation_prompt || ''}
+                onChange={e => setCfg('validation_prompt', e.target.value)}
+                placeholder="Check that each row represents a valid and complete customer record..." />
+            </div>
           </div>
         )
       default: return null
