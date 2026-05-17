@@ -555,6 +555,7 @@ async def seed_lineage_data():
                  "status": "active", "certification_status": "certified", "tags": ["sales", "revenue"]},
             ]
 
+            import json as _json
             for obj in objects:
                 tags = obj.pop("tags")
                 await session.execute(text("""
@@ -563,9 +564,9 @@ async def seed_lineage_data():
                      owner, quality_score, status, certification_status, tags, created_at, updated_at)
                     VALUES (:object_id, :object_name, :object_type, :database_name, :schema_name,
                             :domain, :sub_domain, :owner, :quality_score, :status, :certification_status,
-                            :tags::jsonb, NOW(), NOW())
+                            :tags, NOW(), NOW())
                     ON CONFLICT (object_id) DO NOTHING
-                """), {**obj, "tags": str(tags).replace("'", '"')})
+                """), {**obj, "tags": _json.dumps(tags)})
 
             # Relationships
             relationships = [
