@@ -392,3 +392,8 @@ export const adminApi = {
   cleanDomainData:      (domainId: string) => api.delete(`/admin/domains/${domainId}/data`),
   deleteDomain:         (domainId: string) => api.delete(`/admin/domains/${domainId}`),
 }
+
+// Lineage
+export const lineageApi = {
+  get: (assetId: string) => api.get(`/lineage/${assetId}`),
+}
