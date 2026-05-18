@@ -1,13 +1,13 @@
 'use client'
-import { useState, useEffect, useCallback, useMemo, memo } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   Globe, Database, Shield, Calendar, Bell, ClipboardList, ClipboardCheck,
   PlayCircle, Settings, FolderKanban, LogOut, User, Sun, Moon,
   BrainCircuit, HelpCircle, Search, BookOpen, Package, FileText, Sparkles,
-  AlertOctagon, ShoppingBag, BarChart2, ChevronDown, ChevronRight,
-  PanelLeftClose, PanelLeftOpen, Zap, Lock, Eye, Trash2,
+  AlertOctagon, ShoppingBag, BarChart2, ChevronDown,
+  PanelLeftClose, PanelLeftOpen, Zap, Lock, Trash2,
   Layers, Gavel, Cpu,
 } from 'lucide-react'
 import clsx from 'clsx'
@@ -359,11 +359,6 @@ export default function Sidebar() {
         {visibleSections.map(section => {
           const isCollapsed = collapsedSections.has(section.id)
 
-          // Section-level active: any child is active
-          const sectionActive = section.items.some(item =>
-            pathname === item.href || pathname.startsWith(item.href + '/')
-          )
-
           // Section-level badge: sum of all item badges
           const sectionBadge = section.items.reduce((sum, item) =>
             sum + (item.badgeKey ? (badges[item.badgeKey] ?? 0) : 0), 0
@@ -376,6 +371,7 @@ export default function Sidebar() {
               {!compact ? (
                 <button
                   onClick={() => toggleSection(section.id)}
+                  title={isCollapsed ? `Expand ${section.label}` : `Collapse ${section.label}`}
                   className={clsx(
                     'w-full flex items-center gap-2 px-3.5 pt-2.5 pb-1 transition-opacity',
                     isCollapsed && 'opacity-60'
