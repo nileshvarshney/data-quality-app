@@ -358,7 +358,6 @@ export default function Sidebar() {
       <nav className="flex-1 overflow-y-auto py-2 scrollbar-thin">
         {visibleSections.map(section => {
           const isCollapsed = collapsedSections.has(section.id)
-          const SectionIcon = section.icon
 
           // Section-level active: any child is active
           const sectionActive = section.items.some(item =>
