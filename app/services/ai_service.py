@@ -62,6 +62,91 @@ _SYS_CLASSIFY = (
 
 _SYS_JSON_ONLY = "Return only valid JSON. No markdown, no explanation, no code fences."
 
+GOVERNANCE_SYSTEM = """You are DQ Governance Advisor — an AI assistant for data stewards and governance teams.
+
+PLATFORM: Snowflake data quality platform with governance policies, rule approvals, policy violations, and compliance tracking.
+
+YOUR ROLE: Help governance teams prioritise work, understand violations, suggest resolutions, and review rule changes.
+
+RULES:
+1. Answer only from the live context provided — never invent policy names or violation counts.
+2. Lead with actionable recommendations, not observations.
+3. Use ### headings for multi-part answers.
+4. Be direct. No filler.
+
+FORMAT:
+- **Bold** policy names, rule names, violation IDs.
+- 🔴 critical | 🟠 high | 🟡 medium | 🟢 low severity
+- Steward actions: ✅ Approve | ❌ Reject | 🔄 Needs review | 📋 Assign
+
+SCOPE: policy violations, rule approvals, certification status, compliance gaps, governance scorecards.
+Out of scope: anything unrelated to governance/compliance."""
+
+
+# ── Governance context gathering ─────────────────────────────────────────────
+
+async def gather_governance_context(db: AsyncSession) -> dict:
+    """Fetch live governance data: violations, pending approvals, policies."""
+    from app.db.models import GovernancePolicy, PolicyViolation, DQRule, DataAsset, Domain
+    ctx: dict = {}
+    try:
+        # Open violations (up to 30)
+        viol_res = await db.execute(
+            select(PolicyViolation, GovernancePolicy)
+            .join(GovernancePolicy, PolicyViolation.policy_id == GovernancePolicy.policy_id)
+            .where(PolicyViolation.status == "open")
+            .order_by(desc(PolicyViolation.detected_at))
+            .limit(30)
+        )
+        ctx["open_violations"] = [
+            {
+                "violation_id": r.PolicyViolation.violation_id,
+                "policy_name": r.GovernancePolicy.policy_name,
+                "severity": r.GovernancePolicy.severity,
+                "entity_type": r.PolicyViolation.entity_type,
+                "entity_id": r.PolicyViolation.entity_id,
+                "detail": r.PolicyViolation.violation_detail,
+                "detected_at": str(r.PolicyViolation.detected_at),
+            }
+            for r in viol_res.all()
+        ]
+
+        # Rules pending approval (up to 20)
+        pending_res = await db.execute(
+            select(DQRule, DataAsset, Domain)
+            .join(DataAsset, DQRule.asset_id == DataAsset.asset_id)
+            .join(Domain, DQRule.domain_id == Domain.domain_id)
+            .where(DQRule.status == "pending_review", DQRule.is_active == True)
+            .order_by(DQRule.severity)
+            .limit(20)
+        )
+        ctx["pending_approvals"] = [
+            {
+                "rule_id": r.DQRule.rule_id,
+                "rule_name": r.DQRule.rule_name,
+                "rule_type": r.DQRule.rule_type,
+                "severity": r.DQRule.severity,
+                "table": f"{r.DataAsset.sf_schema_name}.{r.DataAsset.sf_table_name}",
+                "domain": r.Domain.domain_name,
+                "created_by": r.DQRule.created_by,
+            }
+            for r in pending_res.all()
+        ]
+
+        # Active policies summary
+        pol_res = await db.execute(
+            select(GovernancePolicy).where(GovernancePolicy.is_active == True).limit(20)
+        )
+        ctx["active_policies"] = [
+            {"policy_name": p.policy_name, "policy_type": p.policy_type, "severity": p.severity}
+            for p in pol_res.scalars().all()
+        ]
+
+    except Exception as e:
+        logger.warning(f"Governance context gathering failed: {e}")
+        ctx["context_error"] = str(e)
+    return ctx
+
 
 # ── Intent detection (used for auto context gathering) ───────────────────────
 
