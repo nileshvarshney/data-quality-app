@@ -126,6 +126,8 @@ export default function CatalogPage() {
   const [popular,        setPopular]        = useState<CatalogItem[]>([])
   const [popularLoading, setPopularLoading] = useState(true)
   const [hasSearched,    setHasSearched]    = useState(!!searchParams.get('q'))
+  const [featuredPage,   setFeaturedPage]   = useState(1)
+  const FEATURED_PAGE_SIZE = 10
 
   // -- Sync all state → URL on any change -------------------------------------
   useEffect(() => {
@@ -352,14 +354,33 @@ export default function CatalogPage() {
             ) : (
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-sm font-semibold text-gray-700">
+                  <h2 className="text-xs font-semibold text-gray-700">
                     {popular.some(p => (p as any).usage_count > 0) ? 'Popular Assets' : 'Featured Assets'}
                   </h2>
-                  <span className="text-xs text-gray-400">{popular.slice(0, 6).length} assets</span>
+                  <span className="text-xs text-gray-400">{popular.length} assets</span>
                 </div>
-                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
-                  {popular.slice(0, 6).map(item => <CatalogResultCard key={item.id} item={item} />)}
+                <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-gray-100 bg-gray-50">
+                        {['Name', 'Type', 'Domain', 'Owner', 'Quality', 'Certification', 'Rating'].map(h => (
+                          <th key={h} className="text-left text-[11px] font-semibold text-gray-500 px-3 py-2">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {popular
+                        .slice((featuredPage - 1) * FEATURED_PAGE_SIZE, featuredPage * FEATURED_PAGE_SIZE)
+                        .map(item => <CatalogResultRow key={item.id} item={item} />)}
+                    </tbody>
+                  </table>
                 </div>
+                <Pagination
+                  page={featuredPage}
+                  total={popular.length}
+                  pageSize={FEATURED_PAGE_SIZE}
+                  onChange={p => setFeaturedPage(p)}
+                />
               </div>
             )
           )}

@@ -1,0 +1,276 @@
+- generic [active] [ref=e1]:
+  - complementary [ref=e2]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - img "Data Guardian" [ref=e8]
+        - generic [ref=e9]:
+          - paragraph [ref=e10]: DataGuardian
+          - paragraph [ref=e11]: Data Quality & Governance
+        - button "Collapse sidebar" [ref=e12] [cursor=pointer]:
+          - img [ref=e13]
+      - generic [ref=e16]:
+        - generic [ref=e17]: LOCAL
+        - generic [ref=e18]: v3.0
+      - button "Quick search… ⌘K" [ref=e19] [cursor=pointer]:
+        - img [ref=e20]
+        - generic [ref=e23]: Quick search…
+        - generic [ref=e24]: ⌘K
+    - navigation [ref=e25]:
+      - generic [ref=e26]:
+        - button "Overview" [ref=e27] [cursor=pointer]:
+          - img [ref=e28]
+          - generic [ref=e31]: Overview
+          - img [ref=e33]
+        - generic [ref=e35]:
+          - link "Global Dashboard" [ref=e36] [cursor=pointer]:
+            - /url: /dashboard/global/
+            - img [ref=e38]
+            - generic [ref=e41]: Global Dashboard
+          - link "Cost Impact Dashboard" [ref=e42] [cursor=pointer]:
+            - /url: /executive/
+            - img [ref=e44]
+            - generic [ref=e45]: Cost Impact Dashboard
+      - generic [ref=e46]:
+        - button "Data Quality" [ref=e47] [cursor=pointer]:
+          - img [ref=e48]
+          - generic [ref=e50]: Data Quality
+          - img [ref=e52]
+        - generic [ref=e54]:
+          - link "Rules" [ref=e55] [cursor=pointer]:
+            - /url: /rules/
+            - img [ref=e57]
+            - generic [ref=e59]: Rules
+          - link "Approval Queue" [ref=e60] [cursor=pointer]:
+            - /url: /rules/approval-queue/
+            - img [ref=e62]
+            - generic [ref=e66]: Approval Queue
+          - link "Data Assets" [ref=e67] [cursor=pointer]:
+            - /url: /assets/
+            - img [ref=e69]
+            - generic [ref=e73]: Data Assets
+          - link "Schedules" [ref=e74] [cursor=pointer]:
+            - /url: /schedules/
+            - img [ref=e76]
+            - generic [ref=e78]: Schedules
+          - link "Execution Logs" [ref=e79] [cursor=pointer]:
+            - /url: /runs/
+            - img [ref=e81]
+            - generic [ref=e84]: Execution Logs
+      - generic [ref=e85]:
+        - button "Operations" [ref=e86] [cursor=pointer]:
+          - img [ref=e87]
+          - generic [ref=e90]: Operations
+          - img [ref=e92]
+        - generic [ref=e94]:
+          - link "Alerts" [ref=e95] [cursor=pointer]:
+            - /url: /alerts/
+            - img [ref=e97]
+            - generic [ref=e100]: Alerts
+          - link "Audit Logs" [ref=e101] [cursor=pointer]:
+            - /url: /audit/
+            - img [ref=e103]
+            - generic [ref=e106]: Audit Logs
+      - generic [ref=e107]:
+        - button "Data Catalog" [ref=e108] [cursor=pointer]:
+          - img [ref=e109]
+          - generic [ref=e112]: Data Catalog
+          - img [ref=e114]
+        - generic [ref=e116]:
+          - link "Data Catalog" [ref=e117] [cursor=pointer]:
+            - /url: /catalog/
+            - img [ref=e119]
+            - generic [ref=e122]: Data Catalog
+          - link "Glossary" [ref=e123] [cursor=pointer]:
+            - /url: /glossary/
+            - img [ref=e125]
+            - generic [ref=e127]: Glossary
+          - link "Data Products" [ref=e128] [cursor=pointer]:
+            - /url: /data-products/
+            - img [ref=e130]
+            - generic [ref=e134]: Data Products
+      - generic [ref=e135]:
+        - button "Governance" [ref=e136] [cursor=pointer]:
+          - img [ref=e137]
+          - generic [ref=e143]: Governance
+          - img [ref=e145]
+        - generic [ref=e147]:
+          - link "Governance Hub" [ref=e148] [cursor=pointer]:
+            - /url: /governance/
+            - img [ref=e150]
+            - generic [ref=e154]: Governance Hub
+          - link "Data Contracts" [ref=e155] [cursor=pointer]:
+            - /url: /contracts/
+            - img [ref=e157]
+            - generic [ref=e160]: Data Contracts
+          - link "Incidents" [ref=e161] [cursor=pointer]:
+            - /url: /incidents/
+            - img [ref=e163]
+            - generic [ref=e165]: Incidents
+          - link "Rule Marketplace" [ref=e166] [cursor=pointer]:
+            - /url: /marketplace/
+            - img [ref=e168]
+            - generic [ref=e171]: Rule Marketplace
+      - generic [ref=e172]:
+        - button "Privacy & Compliance" [ref=e173] [cursor=pointer]:
+          - img [ref=e174]
+          - generic [ref=e177]: Privacy & Compliance
+          - img [ref=e179]
+        - link "Compliance" [ref=e182] [cursor=pointer]:
+          - /url: /compliance/
+          - img [ref=e184]
+          - generic [ref=e186]: Compliance
+      - generic [ref=e187]:
+        - button "AI Intelligence" [ref=e188] [cursor=pointer]:
+          - img [ref=e189]
+          - generic [ref=e192]: AI Intelligence
+          - img [ref=e194]
+        - generic [ref=e196]:
+          - button "AI Copilot" [ref=e197] [cursor=pointer]:
+            - img [ref=e199]
+            - generic [ref=e201]: AI Copilot
+          - link "AI Assistant" [ref=e202] [cursor=pointer]:
+            - /url: /ai-assistant/
+            - img [ref=e204]
+            - generic [ref=e216]: AI Assistant
+      - generic [ref=e217]:
+        - button "Support" [ref=e218] [cursor=pointer]:
+          - img [ref=e219]
+          - generic [ref=e222]: Support
+          - img [ref=e224]
+        - link "Help & Reference" [ref=e227] [cursor=pointer]:
+          - /url: /help/
+          - img [ref=e229]
+          - generic [ref=e232]: Help & Reference
+    - generic [ref=e233]:
+      - button "Dark Mode Off" [ref=e234] [cursor=pointer]:
+        - img [ref=e235]
+        - generic [ref=e237]: Dark Mode
+        - generic [ref=e238]: "Off"
+      - paragraph [ref=e239]:
+        - img [ref=e240]
+        - text: Data Guardian v3.0
+        - generic [ref=e242]: © 2026
+  - main [ref=e243]
+  - dialog "AI Copilot":
+    - generic:
+      - generic:
+        - generic:
+          - img
+        - generic:
+          - generic:
+            - paragraph: AI Copilot
+            - generic:
+              - img
+              - text: quick access
+          - paragraph: Live data · multi-source · conversation memory
+      - generic:
+        - button "Clear conversation":
+          - img
+        - link "Open full-page AI Assistant":
+          - /url: /ai-assistant/
+          - img
+        - button:
+          - img
+    - generic:
+      - button "Create Rule":
+        - img
+        - text: Create Rule
+      - generic: Live data · LLM formatted
+    - generic:
+      - button "Why did quality drop today?"
+      - button "Overall quality score"
+      - button "Revenue domain health"
+      - button "Failed rules this week"
+      - button "Open critical alerts"
+      - button "Governance violations"
+      - button "Tables with no owners"
+      - button "Data contracts at risk"
+      - button "Finance quality trend"
+      - button "Active incidents"
+      - button "Cost of bad data"
+      - button "Show HR failing rules"
+    - generic:
+      - generic:
+        - generic:
+          - img
+        - generic:
+          - generic:
+            - generic:
+              - paragraph:
+                - text: Hi! I'm your
+                - strong: AI Copilot
+                - text: — a superman data intelligence assistant with live access to every corner of this platform.
+              - paragraph:
+                - strong: "What I can answer:"
+              - list:
+                - listitem:
+                  - generic: •
+                  - generic:
+                    - strong: Quality
+                    - text: — overall score, domain health, failing rules, trends
+                - listitem:
+                  - generic: •
+                  - generic:
+                    - strong: Root Cause
+                    - text: — why quality dropped, which rules are breaking, patterns
+                - listitem:
+                  - generic: •
+                  - generic:
+                    - strong: Governance
+                    - text: — policy violations, scorecards, uncertified tables, PII gaps
+                - listitem:
+                  - generic: •
+                  - generic:
+                    - strong: Contracts
+                    - text: — data contracts, SLA violations, producer/consumer health
+                - listitem:
+                  - generic: •
+                  - generic:
+                    - strong: Incidents
+                    - text: — open incidents, MTTD, MTTR, blast radius
+                - listitem:
+                  - generic: •
+                  - generic:
+                    - strong: Catalog
+                    - text: — popular assets, data products, business glossary
+                - listitem:
+                  - generic: •
+                  - generic:
+                    - strong: Lineage
+                    - text: — upstream/downstream dependencies, impact analysis
+                - listitem:
+                  - generic: •
+                  - generic:
+                    - strong: Compliance
+                    - text: — GDPR, SOX, HIPAA framework gaps
+                - listitem:
+                  - generic: •
+                  - generic:
+                    - strong: Cost
+                    - text: — bad data ROI, incident cost by domain
+                - listitem:
+                  - generic: •
+                  - generic:
+                    - strong: Alerts
+                    - text: — open critical alerts, severity breakdowns
+              - paragraph:
+                - text: "Try:"
+                - emphasis: "\"Why did Revenue quality drop?\""
+                - text: or
+                - emphasis: "\"Which Finance tables failed this week?\""
+            - generic:
+              - generic:
+                - img
+                - text: AI · live data
+              - button "Copy":
+                - img
+                - text: Copy
+    - generic:
+      - generic:
+        - textbox "Ask about quality, governance, contracts, incidents…"
+        - button [disabled]:
+          - img
+  - button "Open AI Copilot (quick access)" [ref=e244] [cursor=pointer]:
+    - img [ref=e245]
+  - region "Notifications alt+T"
+  - alert [ref=e247]

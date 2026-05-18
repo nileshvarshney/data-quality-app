@@ -1,0 +1,12 @@
+[    1157ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://dq-platform.pages.dev/favicon.ico:0
+[    1327ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://data-quality-app-sc1z.onrender.com//config/public/display-timezone:0
+[ 1633071ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://data-quality-app-sc1z.onrender.com//config/public/display-timezone:0
+[ 1634322ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://dq-platform.pages.dev/rules/2e056172-27f8-4b75-b3cc-914477aec3d8/index.txt?_rsc=10k2l:0
+[ 1634326ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://dq-platform.pages.dev/rules/61eda111-d8d0-4483-8293-2927836fe72b/index.txt?_rsc=10k2l:0
+[ 1754620ms] [ERROR] Failed to load resource: the server responded with a status of 400 () @ https://data-quality-app-sc1z.onrender.com/rules/preview-sql:0
+[ 2036257ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://data-quality-app-sc1z.onrender.com//config/public/display-timezone:0
+[ 2037875ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://dq-platform.pages.dev/rules/2e056172-27f8-4b75-b3cc-914477aec3d8/index.txt?_rsc=10k2l:0
+[ 2037876ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://dq-platform.pages.dev/rules/ad6ead59-2756-44f1-840e-fa22cac71b7e/index.txt?_rsc=10k2l:0
+[ 2037879ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://dq-platform.pages.dev/rules/61eda111-d8d0-4483-8293-2927836fe72b/index.txt?_rsc=10k2l:0
+[ 2103846ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://data-quality-app-sc1z.onrender.com//config/public/display-timezone:0
+[25253608ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://data-quality-app-sc1z.onrender.com//config/public/display-timezone:0

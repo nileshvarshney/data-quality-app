@@ -48,12 +48,19 @@ interface AssessmentSummary {
 // ── Colour map ────────────────────────────────────────────────────────────────
 
 const FW_STYLES: Record<string, { accent: string; light: string }> = {
-  'GDPR':     { accent: 'bg-blue-600',   light: 'bg-blue-50'   },
-  'CCPA':     { accent: 'bg-indigo-600', light: 'bg-indigo-50' },
-  'HIPAA':    { accent: 'bg-green-600',  light: 'bg-green-50'  },
-  'SOX':      { accent: 'bg-orange-600', light: 'bg-orange-50' },
-  'BCBS 239': { accent: 'bg-purple-600', light: 'bg-purple-50' },
-  'ISO 27001':{ accent: 'bg-teal-600',   light: 'bg-teal-50'   },
+  'GDPR':         { accent: 'bg-blue-600',    light: 'bg-blue-50'    },
+  'CCPA':         { accent: 'bg-indigo-600',  light: 'bg-indigo-50'  },
+  'HIPAA':        { accent: 'bg-green-600',   light: 'bg-green-50'   },
+  'SOX':          { accent: 'bg-orange-600',  light: 'bg-orange-50'  },
+  'BCBS 239':     { accent: 'bg-purple-600',  light: 'bg-purple-50'  },
+  'ISO 27001':    { accent: 'bg-teal-600',    light: 'bg-teal-50'    },
+  'SOC 2 Type II':{ accent: 'bg-cyan-600',    light: 'bg-cyan-50'    },
+  'ISO 27701':    { accent: 'bg-violet-600',  light: 'bg-violet-50'  },
+  'NIST CSF':     { accent: 'bg-sky-600',     light: 'bg-sky-50'     },
+  'NIST 800-53':  { accent: 'bg-rose-600',    light: 'bg-rose-50'    },
+  'CIS Controls': { accent: 'bg-amber-600',   light: 'bg-amber-50'   },
+  'PCI DSS':      { accent: 'bg-red-600',     light: 'bg-red-50'     },
+  'HITRUST':      { accent: 'bg-emerald-600', light: 'bg-emerald-50' },
 }
 const fwStyle = (name: string) =>
   FW_STYLES[name] ?? { accent: 'bg-gray-600', light: 'bg-gray-50' }

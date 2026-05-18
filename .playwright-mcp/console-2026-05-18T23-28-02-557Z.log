@@ -1,0 +1,10 @@
+[    1719ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:24650
+[    4151ms] [ERROR] Access to XMLHttpRequest at 'http://localhost:8000/catalog/facets' from origin 'http://localhost:3000' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:3000/catalog/:0
+[    4153ms] [ERROR] Failed to load resource: net::ERR_FAILED @ http://localhost:8000/catalog/facets:0
+[    4169ms] [ERROR] Access to XMLHttpRequest at 'http://localhost:8000/catalog/facets' from origin 'http://localhost:3000' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:3000/catalog/:0
+[    4169ms] [ERROR] Failed to load resource: net::ERR_FAILED @ http://localhost:8000/catalog/facets:0
+[   18465ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:24650
+[   18655ms] [ERROR] Access to XMLHttpRequest at 'http://localhost:8000/catalog/facets' from origin 'http://localhost:3000' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:3000/catalog/:0
+[   18656ms] [ERROR] Failed to load resource: net::ERR_FAILED @ http://localhost:8000/catalog/facets:0
+[   18669ms] [ERROR] Access to XMLHttpRequest at 'http://localhost:8000/catalog/facets' from origin 'http://localhost:3000' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:3000/catalog/:0
+[   18669ms] [ERROR] Failed to load resource: net::ERR_FAILED @ http://localhost:8000/catalog/facets:0

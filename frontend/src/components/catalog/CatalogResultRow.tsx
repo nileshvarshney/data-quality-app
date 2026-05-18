@@ -26,11 +26,11 @@ export default function CatalogResultRow({ item }: { item: CatalogItem }) {
   return (
     <tr className="hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-0">
       <td className="py-2.5 px-3">
-        <Link href={href} className="font-medium text-sm text-blue-700 hover:underline">
+        <Link href={href} className="font-medium text-xs text-blue-700 hover:underline">
           {item.name}
         </Link>
         {item.description && (
-          <p className="text-xs text-gray-400 truncate max-w-xs">{item.description}</p>
+          <p className="text-[11px] text-gray-400 truncate max-w-xs">{item.description}</p>
         )}
       </td>
       <td className="py-2.5 px-3">
