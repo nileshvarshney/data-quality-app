@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
-import { useParams, usePathname } from 'next/navigation'
+import { useParams, usePathname, useRouter } from 'next/navigation'
 import { rulesApi, executionsApi } from '@/services/apiClient'
 import SeverityBadge from '@/components/common/SeverityBadge'
 import Breadcrumbs from '@/components/common/Breadcrumbs'
@@ -588,12 +588,18 @@ function ApprovalPanel({ rule, onUpdate }: { rule: RuleDetail; onUpdate: () => v
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const STATIC_SEGMENTS = new Set(['rules', 'approval-queue', 'create'])
+
 export default function RuleDetailPage() {
   const { ruleId: _ruleId } = useParams<{ ruleId: string }>()
   const pathname = usePathname()
+  const router = useRouter()
+  const segments = pathname.split('/').filter(Boolean)
+  const lastSegment = segments[segments.length - 1] ?? ''
   const ruleId = (_ruleId && _ruleId !== '__placeholder__')
     ? _ruleId
-    : pathname.split('/').filter(Boolean).pop() ?? ''
+    : lastSegment
   const { formatTs } = useTimezone()
   const [rule, setRule] = useState<RuleDetail | null>(null)
   const [versions, setVersions] = useState<RuleVersion[]>([])
@@ -604,6 +610,20 @@ export default function RuleDetailPage() {
   const [activeTab, setActiveTab] = useState<'details' | 'history' | 'versions'>('details')
   const [restoreTarget, setRestoreTarget] = useState<RuleVersion | null>(null)
   const [rollingBack, setRollingBack] = useState(false)
+
+  // Guard: if placeholder was served for a static route (e.g. /rules/ or /rules/approval-queue/),
+  // self-correct by navigating to the right page.
+  useEffect(() => {
+    if (STATIC_SEGMENTS.has(lastSegment) || !UUID_RE.test(ruleId)) {
+      if (pathname.includes('approval-queue')) {
+        router.replace('/rules/approval-queue')
+      } else if (pathname.includes('create')) {
+        router.replace('/rules/create')
+      } else {
+        router.replace('/rules')
+      }
+    }
+  }, [lastSegment, ruleId, pathname, router])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -621,7 +641,7 @@ export default function RuleDetailPage() {
     }
   }, [ruleId])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { if (UUID_RE.test(ruleId)) load() }, [load, ruleId])
 
   const handleRun = async () => {
     setRunning(true)

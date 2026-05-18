@@ -1053,7 +1053,7 @@ export default function AssetsPage() {
                     <div className="flex items-start gap-2">
                       <Database size={14} className="text-gray-400 mt-0.5 shrink-0" />
                       <div>
-                        <p className="font-medium text-gray-900">{asset.sf_table_name}</p>
+                        <p className="text-xs font-medium text-gray-900">{asset.sf_table_name}</p>
                         <p className="text-xs text-gray-400 font-mono mt-0.5">
                           {[asset.sf_database_name, asset.sf_schema_name].filter(Boolean).join('.')}
                         </p>

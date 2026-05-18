@@ -848,7 +848,7 @@ export default function GlobalDashboardPage() {
                                   </span>
                                 </td>
                                 <td className="px-4 py-3">
-                                  <span className="text-xs text-gray-500 truncate max-w-[140px] block">
+                                  <span className="text-[10px] text-gray-500 truncate block">
                                     {run.sf_table_name ?? run.asset_id?.slice(0, 10) ?? '—'}
                                   </span>
                                 </td>

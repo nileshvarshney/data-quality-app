@@ -44,7 +44,7 @@ function TableCard({ a, trackColor }: { a: any; trackColor: string }) {
       className="bg-white rounded-xl border border-gray-200 p-4 hover:border-blue-300 hover:shadow-md transition-all group block">
       <div className="flex items-start justify-between gap-2 mb-3">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-gray-900 group-hover:text-blue-700 transition-colors truncate">
+          <p className="text-xs font-semibold text-gray-900 group-hover:text-blue-700 transition-colors truncate">
             {a.sf_schema_name}.{a.sf_table_name}
           </p>
           <span className={`inline-block mt-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${scoreBadgeClass(score)}`}>

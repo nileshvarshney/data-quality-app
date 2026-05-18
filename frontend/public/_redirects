@@ -1,16 +1,21 @@
-# SPA fallback: serve pre-built shell for dynamic routes.
-# Next.js client-side router reads the real browser URL, so useParams()
-# returns the actual ID even though Cloudflare serves the placeholder HTML.
-#
-# Static sub-pages must be listed BEFORE their wildcard catch-all, because
+# Static sub-pages must be listed BEFORE the dynamic catch-all.
 # Cloudflare Pages evaluates _redirects before serving directory index files.
+#
+# Use :param (named segment) instead of * (wildcard) for the dynamic rule —
+# :param requires a non-empty segment so it never matches /rules/ itself.
+
 /rules/                           /rules/index.html                              200
 /rules/approval-queue             /rules/approval-queue/index.html               200
 /rules/approval-queue/            /rules/approval-queue/index.html               200
 /rules/create                     /rules/create/index.html                       200
 /rules/create/                    /rules/create/index.html                       200
-/rules/*                          /rules/__placeholder__/                        200
+/rules/:ruleId                    /rules/__placeholder__/                        200
+/rules/:ruleId/                   /rules/__placeholder__/                        200
+
 /dashboard/domains/               /dashboard/domains/index.html                  200
-/dashboard/domains/*              /dashboard/domains/__placeholder__/            200
-/dashboard/subdomains/*           /dashboard/subdomains/__placeholder__/        200
-/dashboard/tables/*               /dashboard/tables/__placeholder__/             200
+/dashboard/domains/:id            /dashboard/domains/__placeholder__/            200
+/dashboard/domains/:id/           /dashboard/domains/__placeholder__/            200
+/dashboard/subdomains/:id         /dashboard/subdomains/__placeholder__/         200
+/dashboard/subdomains/:id/        /dashboard/subdomains/__placeholder__/         200
+/dashboard/tables/:id             /dashboard/tables/__placeholder__/             200
+/dashboard/tables/:id/            /dashboard/tables/__placeholder__/             200

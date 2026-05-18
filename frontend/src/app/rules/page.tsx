@@ -949,7 +949,7 @@ export default function RulesPage() {
                       <Tooltip text={`${rule.sf_database_name ? rule.sf_database_name + '.' : ''}${rule.sf_schema_name}.${rule.sf_table_name}`} position="top">
                         <div className="flex items-center gap-1 min-w-0">
                           <Database size={10} className="text-gray-300 shrink-0" />
-                          <span className="text-gray-600 font-mono truncate max-w-[160px]">
+                          <span className="text-[10px] text-gray-600 font-mono truncate max-w-[220px]">
                             {rule.sf_schema_name}.{rule.sf_table_name}
                           </span>
                         </div>
