@@ -282,15 +282,19 @@ async def rule_from_natural_language(
     user=Depends(get_current_user),
 ):
     """
-    Convert a plain-English rule description to a structured rule definition (§54.3).
-    payload: {description: str, asset_id: str, domain_context?: str}
+    Convert plain-English rule to structured JSON.
+    Supports iterative refinement via `prior_result` + `refinement` fields.
+    payload: {description, asset_id?, domain_context?, provider?, prior_result?, refinement?}
     """
     from sqlalchemy import select
     from app.db.models import DataAsset
     from app.services.llm_providers import get_provider_from_db
 
-    description = payload.get("description", "")
-    asset_id    = payload.get("asset_id", "")
+    description  = payload.get("description", "")
+    asset_id     = payload.get("asset_id", "")
+    prior_result = payload.get("prior_result")
+    refinement   = payload.get("refinement", "")
+
     if not description:
         raise HTTPException(400, "description is required")
 
@@ -307,11 +311,24 @@ async def rule_from_natural_language(
         "freshness_check, volume_check, regex_check, business_rule_check, custom_sql_check, "
         "semantic_consistency_check. severity: critical|high|medium|low."
     )
-    prompt = (
-        f"Table: {asset_name or 'unknown'}\n"
-        f"Domain: {payload.get('domain_context', '')}\n"
-        f"Rule: {description}"
-    )
+
+    if prior_result and refinement:
+        import json as _j
+        prompt = (
+            f"Table: {asset_name or 'unknown'}\n"
+            f"Domain: {payload.get('domain_context', '')}\n"
+            f"Original rule: {description}\n"
+            f"Previous result: {_j.dumps(prior_result)}\n"
+            f"Refinement request: {refinement}\n"
+            f"Return an improved version of the rule definition."
+        )
+    else:
+        prompt = (
+            f"Table: {asset_name or 'unknown'}\n"
+            f"Domain: {payload.get('domain_context', '')}\n"
+            f"Rule: {description}"
+        )
+
     try:
         provider = await get_provider_from_db(payload.get("provider"), db)
         raw = await provider.complete(prompt, system=sys_nl, max_tokens=500)
@@ -321,7 +338,12 @@ async def rule_from_natural_language(
     except Exception as e:
         raise HTTPException(503, f"LLM error: {e}")
 
-    return {"asset_id": asset_id, "input_description": description, "rule_definition": result}
+    return {
+        "asset_id": asset_id,
+        "input_description": description,
+        "refinement": refinement or None,
+        "rule_definition": result,
+    }
 
 
 @router.post("/rca/{run_id}")
