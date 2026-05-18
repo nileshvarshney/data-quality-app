@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, usePathname } from 'next/navigation'
 import { rulesApi, executionsApi } from '@/services/apiClient'
 import SeverityBadge from '@/components/common/SeverityBadge'
 import Breadcrumbs from '@/components/common/Breadcrumbs'
@@ -589,7 +589,11 @@ function ApprovalPanel({ rule, onUpdate }: { rule: RuleDetail; onUpdate: () => v
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function RuleDetailPage() {
-  const { ruleId } = useParams<{ ruleId: string }>()
+  const { ruleId: _ruleId } = useParams<{ ruleId: string }>()
+  const pathname = usePathname()
+  const ruleId = (_ruleId && _ruleId !== '__placeholder__')
+    ? _ruleId
+    : pathname.split('/').filter(Boolean).pop() ?? ''
   const { formatTs } = useTimezone()
   const [rule, setRule] = useState<RuleDetail | null>(null)
   const [versions, setVersions] = useState<RuleVersion[]>([])

@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import {
   Shield, CheckCircle, XCircle, Activity, Clock,
@@ -185,7 +185,11 @@ function AIExplainPanel({ runId, ruleId }: { runId: string; ruleId: string }) {
 // ── Page ──────────────────────────────────────────────────────────
 
 export default function TableDashboardPage() {
-  const { assetId } = useParams<{ assetId: string }>()
+  const { assetId: _assetId } = useParams<{ assetId: string }>()
+  const pathname = usePathname()
+  const assetId = (_assetId && _assetId !== '__placeholder__')
+    ? _assetId
+    : pathname.split('/').filter(Boolean).pop() ?? ''
   const { theme }   = useTheme()
   const { formatTs } = useTimezone()
   const trackColor  = theme === 'dark' ? '#334155' : '#e2e8f0'

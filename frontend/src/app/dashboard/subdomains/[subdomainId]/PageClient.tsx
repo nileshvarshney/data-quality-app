@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import {
   Shield, Database, CheckCircle, XCircle, Activity,
@@ -67,7 +67,11 @@ function TableCard({ a, trackColor }: { a: any; trackColor: string }) {
 }
 
 export default function SubdomainDetailPage() {
-  const { subdomainId } = useParams<{ subdomainId: string }>()
+  const { subdomainId: _subdomainId } = useParams<{ subdomainId: string }>()
+  const pathname = usePathname()
+  const subdomainId = (_subdomainId && _subdomainId !== '__placeholder__')
+    ? _subdomainId
+    : pathname.split('/').filter(Boolean).pop() ?? ''
   const { theme } = useTheme()
   const trackColor = theme === 'dark' ? '#334155' : '#e2e8f0'
 
