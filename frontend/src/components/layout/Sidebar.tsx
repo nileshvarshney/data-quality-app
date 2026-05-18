@@ -371,32 +371,37 @@ export default function Sidebar() {
           )
 
           return (
-            <div key={section.id} className={clsx('mb-0.5', compact && 'px-1')}>
+            <div key={section.id} className={clsx(compact && 'px-1')}>
 
               {/* Section header */}
               {!compact ? (
                 <button
                   onClick={() => toggleSection(section.id)}
                   className={clsx(
-                    'w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-semibold uppercase tracking-widest transition-colors',
-                    sectionActive
-                      ? '[color:var(--sidebar-active-text)]'
-                      : '[color:var(--sidebar-subtle)] hover:[color:var(--sidebar-text)]'
+                    'w-full flex items-center gap-2 px-3.5 pt-2.5 pb-1 transition-opacity',
+                    isCollapsed && 'opacity-60'
                   )}
                 >
-                  <SectionIcon size={11} className="shrink-0" />
-                  <span className="flex-1 text-left">{section.label}</span>
+                  <span
+                    className="text-[9.5px] font-bold tracking-[.08em] uppercase shrink-0"
+                    style={{ color: 'var(--sidebar-subtle)' }}
+                  >
+                    {section.label}
+                  </span>
+                  <span className="flex-1 h-px" style={{ background: 'var(--sidebar-divider)' }} />
                   {sectionBadge > 0 && (
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-500 text-white">
+                    <span className="text-[9px] font-bold px-1.5 h-4 flex items-center rounded-full bg-red-500 text-white ml-1">
                       {sectionBadge}
                     </span>
                   )}
-                  <span className={clsx('transition-transform duration-200', isCollapsed && '-rotate-90')}>
-                    <ChevronDown size={11} />
-                  </span>
+                  <ChevronDown
+                    size={10}
+                    className={clsx('shrink-0 ml-0.5 transition-transform duration-200', isCollapsed && '-rotate-90')}
+                    style={{ color: 'var(--sidebar-subtle)', opacity: 0.5 }}
+                  />
                 </button>
               ) : (
-                /* Compact: tiny divider line between sections */
+                /* Compact: thin divider between sections */
                 <div className="my-1 mx-2 h-px" style={{ backgroundColor: 'var(--sidebar-border)' }} />
               )}
 
