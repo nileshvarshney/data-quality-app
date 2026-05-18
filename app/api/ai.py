@@ -380,6 +380,46 @@ async def trigger_rca(
     return {"run_id": run_id, "rule_id": run.rule_id, "asset_id": run.asset_id, "rca": rca}
 
 
+@router.post("/chat/governance")
+@limiter.limit("30/minute")
+async def governance_chat(
+    request: Request,
+    payload: ChatRequest,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Governance-focused chat using GOVERNANCE_SYSTEM prompt and live violation/approval context."""
+    try:
+        from app.services.ai_service import (
+            gather_governance_context, GOVERNANCE_SYSTEM,
+            _compress_context, _trim_history,
+        )
+        from app.services.llm_providers import get_provider_from_db as _gpfdb
+        from app.services.config_service import get_value
+        from app.core.config import settings
+
+        gov_ctx = payload.context or await gather_governance_context(db)
+        ctx_block = f"\n\nLive Governance Data:\n{_compress_context(gov_ctx)}\n"
+        prompt = f"{ctx_block}\nQuestion: {payload.message}"
+
+        trimmed = _trim_history([{"role": h.role, "content": h.content} for h in (payload.history or [])])
+        provider = await _gpfdb(payload.provider, db)
+
+        if hasattr(provider, "complete_messages"):
+            messages = [{"role": "system", "content": GOVERNANCE_SYSTEM}]
+            for h in trimmed:
+                messages.append({"role": h["role"], "content": h["content"]})
+            messages.append({"role": "user", "content": prompt})
+            response = await provider.complete_messages(messages)
+        else:
+            response = await provider.complete(prompt, GOVERNANCE_SYSTEM, max_tokens=1500)
+
+        active_provider = payload.provider or await get_value("llm_provider", db) or settings.llm_provider
+        return ChatResponse(response=response, provider=active_provider)
+    except RuntimeError as e:
+        raise _llm_err(e)
+
+
 @router.post("/incidents/{incident_id}/generate-postmortem")
 async def generate_postmortem(
     incident_id: str,
