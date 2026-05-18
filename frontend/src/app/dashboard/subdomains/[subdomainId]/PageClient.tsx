@@ -4,7 +4,7 @@ import { useParams, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import {
   Shield, Database, CheckCircle, XCircle, Activity,
-  ChevronRight, RefreshCw, Clock, PlayCircle,
+  ChevronRight, ChevronLeft, RefreshCw, Clock, PlayCircle,
 } from 'lucide-react'
 import { dashboardApi, executionsApi } from '@/services/apiClient'
 import QualityTrendChart from '@/components/charts/QualityTrendChart'
@@ -37,32 +37,123 @@ function relTime(iso: string) {
   if (d < 86400) return `${Math.floor(d/3600)}h ago`; return `${Math.floor(d/86400)}d ago`
 }
 
-function TableCard({ a, trackColor }: { a: any; trackColor: string }) {
-  const score = a.quality_score ?? 0
+const TABLE_PAGE_SIZE = 10
+
+function TableHealthTable({ assets, trackColor }: { assets: any[]; trackColor: string }) {
+  const [page, setPage] = useState(0)
+  const totalPages = Math.ceil(assets.length / TABLE_PAGE_SIZE)
+  const slice = assets.slice(page * TABLE_PAGE_SIZE, (page + 1) * TABLE_PAGE_SIZE)
+  const start = page * TABLE_PAGE_SIZE + 1
+  const end = Math.min((page + 1) * TABLE_PAGE_SIZE, assets.length)
+
   return (
-    <Link href={`/dashboard/tables/${a.asset_id}`}
-      className="bg-white rounded-xl border border-gray-200 p-4 hover:border-blue-300 hover:shadow-md transition-all group block">
-      <div className="flex items-start justify-between gap-2 mb-3">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold text-gray-900 group-hover:text-blue-700 transition-colors truncate">
-            {a.sf_schema_name}.{a.sf_table_name}
-          </p>
-          <span className={`inline-block mt-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${scoreBadgeClass(score)}`}>
-            {scoreLabel(score)}
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100">
+        <p className="text-xs font-semibold uppercase tracking-widest text-gray-400">Table Health</p>
+        <span className="text-[11px] text-gray-400">{assets.length} table{assets.length !== 1 ? 's' : ''}</span>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-100">
+              <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-400 uppercase tracking-widest w-[40%]">Table</th>
+              <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-400 uppercase tracking-widest w-[18%]">Status</th>
+              <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-400 uppercase tracking-widest w-[28%]">Quality Score</th>
+              <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-400 uppercase tracking-widest w-[10%]">Rules</th>
+              <th className="w-[4%]" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {slice.map((a: any) => {
+              const score = a.quality_score ?? 0
+              return (
+                <tr key={a.asset_id} className="hover:bg-gray-50 transition-colors group">
+                  <td className="px-4 py-3">
+                    <p className="font-semibold text-gray-900 group-hover:text-blue-700 transition-colors truncate">
+                      {a.sf_schema_name}.{a.sf_table_name}
+                    </p>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${scoreBadgeClass(score)}`}>
+                      {scoreLabel(score)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="relative shrink-0">
+                        <ScoreRing score={score} size={36} strokeWidth={4} trackColor={trackColor} />
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <span className={`text-[9px] font-bold ${scoreTextColor(score)}`}>{score.toFixed(0)}</span>
+                        </div>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden w-24">
+                          <div
+                            className="h-full rounded-full"
+                            style={{ width: `${score}%`, backgroundColor: score >= 95 ? '#22c55e' : score >= 80 ? '#f59e0b' : score >= 60 ? '#f97316' : '#ef4444' }}
+                          />
+                        </div>
+                        <span className={`text-[10px] font-bold tabular-nums ${scoreTextColor(score)}`}>{score.toFixed(1)}%</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="flex items-center gap-1 text-gray-500">
+                      <Shield size={11} className="text-gray-400 shrink-0" />
+                      {a.total_rules}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <Link
+                      href={`/dashboard/tables/${a.asset_id}`}
+                      className="inline-flex items-center text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <ChevronRight size={15} />
+                    </Link>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100">
+          <span className="text-[11px] text-gray-400">
+            {start}–{end} of {assets.length} tables
           </span>
-        </div>
-        <div className="relative shrink-0">
-          <ScoreRing score={score} size={56} strokeWidth={6} trackColor={trackColor} />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className={`text-[11px] font-bold ${scoreTextColor(score)}`}>{score.toFixed(0)}%</span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+              disabled={page === 0}
+              className="flex items-center gap-0.5 px-2.5 py-1 text-[11px] font-medium text-gray-600 border border-gray-200 rounded hover:border-blue-300 hover:text-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronLeft size={12} /> Prev
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => (
+              <button
+                key={i}
+                onClick={() => setPage(i)}
+                className={`w-6 h-6 text-[11px] font-medium rounded transition-colors ${
+                  i === page ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-100'
+                }`}
+              >
+                {i + 1}
+              </button>
+            ))}
+            <button
+              onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+              disabled={page === totalPages - 1}
+              className="flex items-center gap-0.5 px-2.5 py-1 text-[11px] font-medium text-gray-600 border border-gray-200 rounded hover:border-blue-300 hover:text-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Next <ChevronRight size={12} />
+            </button>
           </div>
         </div>
-      </div>
-      <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-        <span className="flex items-center gap-1 text-[11px] text-gray-400"><Shield size={10} />{a.total_rules} rules</span>
-        <ChevronRight size={11} className="text-gray-300 group-hover:text-blue-500 transition-colors" />
-      </div>
-    </Link>
+      )}
+    </div>
   )
 }
 
@@ -197,14 +288,9 @@ export default function SubdomainDetailPage() {
         </div>
       </div>
 
-      {/* Tables grid */}
+      {/* Table Health */}
       {(data.assets || []).length > 0 && (
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-3">Table Health</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-            {data.assets.map((a: any) => <TableCard key={a.asset_id} a={a} trackColor={trackColor} />)}
-          </div>
-        </div>
+        <TableHealthTable assets={data.assets} trackColor={trackColor} />
       )}
 
       {/* Trend chart */}

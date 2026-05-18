@@ -234,7 +234,10 @@ async def catalog_facets(
     async def _certification_counts():
         stmt = (
             select(DataAsset.certification_status, func.count().label("cnt"))
-            .where(DataAsset.is_active == True)  # noqa: E712
+            .where(
+                DataAsset.is_active == True,  # noqa: E712
+                DataAsset.certification_status.isnot(None),
+            )
             .group_by(DataAsset.certification_status)
             .order_by(desc("cnt"))
         )
@@ -398,11 +401,17 @@ async def catalog_popular(
             select(DataAsset).where(DataAsset.asset_id.in_(asset_ids))
         )).scalars().all()
     else:
+        # No usage data yet — show recently updated certified assets first,
+        # then fall back to assets with descriptions, capped at 6.
         assets = (await db.execute(
             select(DataAsset)
             .where(DataAsset.is_active == True)  # noqa: E712
-            .order_by(DataAsset.domain_id, DataAsset.sf_table_name)
-            .limit(50)
+            .order_by(
+                DataAsset.certification_status.isnot(None).desc(),
+                DataAsset.table_description.isnot(None).desc(),
+                desc(DataAsset.updated_at),
+            )
+            .limit(6)
         )).scalars().all()
 
     return [

@@ -322,9 +322,14 @@ export default function CatalogPage() {
               </div>
             ) : (
               <div>
-                <h2 className="text-sm font-semibold text-gray-700 mb-3">Popular Assets</h2>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                  {popular.map(item => <CatalogResultCard key={item.id} item={item} />)}
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-sm font-semibold text-gray-700">
+                    {popular.some(p => (p as any).usage_count > 0) ? 'Popular Assets' : 'Featured Assets'}
+                  </h2>
+                  <span className="text-xs text-gray-400">{popular.slice(0, 6).length} assets</span>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
+                  {popular.slice(0, 6).map(item => <CatalogResultCard key={item.id} item={item} />)}
                 </div>
               </div>
             )
