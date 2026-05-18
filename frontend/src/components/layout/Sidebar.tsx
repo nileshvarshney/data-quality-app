@@ -407,36 +407,39 @@ export default function Sidebar() {
 
               {/* Section items */}
               {!isCollapsed && (
-                <div className={clsx('space-y-0.5', !compact && 'mt-0.5')}>
+                <div className={clsx('space-y-px', !compact && 'mt-0.5')}>
                   {section.items.map(({ href, label, icon: Icon, badgeKey, action }) => {
                     const active = !action && (pathname === href || pathname.startsWith(href + '/'))
                     const badgeCount = badgeKey ? (badges[badgeKey] ?? 0) : 0
 
                     const itemCls = clsx(
-                      'flex items-center gap-2.5 rounded-lg text-[13px] transition-all cursor-pointer',
-                      compact ? 'justify-center p-2.5 mx-auto' : 'px-3 py-2 mx-1',
+                      'flex items-center gap-2 rounded-[7px] text-[11.5px] transition-all cursor-pointer',
+                      compact ? 'justify-center p-2 mx-auto' : 'px-2.5 py-1.5 mx-1',
                       active
-                        ? '[background-color:var(--sidebar-active-bg)] [color:var(--sidebar-active-text)] font-semibold shadow-sm'
+                        ? '[background-color:var(--sidebar-active-bg)] [color:var(--sidebar-active-text)] font-semibold'
                         : '[color:var(--sidebar-muted)] hover:[background-color:var(--sidebar-hover)] hover:[color:var(--sidebar-text)]'
                     )
 
                     const inner = (
                       <>
-                        <span className="relative shrink-0">
-                          <Icon size={15} />
-                          {active && !compact && (
-                            <span className="absolute -left-1 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-full bg-indigo-400 shadow-[0_0_6px_rgba(129,140,248,0.7)]" />
-                          )}
+                        {/* Fixed-width icon slot — keeps all labels left-aligned */}
+                        <span className="w-[14px] flex items-center justify-center shrink-0">
+                          <Icon size={13} />
                         </span>
                         {!compact && (
                           <>
                             <span className="flex-1 truncate">{label}</span>
                             {badgeCount > 0 && (
-                              <span className="text-[10px] font-bold min-w-[18px] h-[18px] flex items-center justify-center rounded-full px-1 bg-red-500 text-white">
+                              <span className="text-[9px] font-bold min-w-[16px] h-[16px] flex items-center justify-center rounded-full px-1 bg-red-500 text-white">
                                 {badgeCount > 99 ? '99+' : badgeCount}
                               </span>
                             )}
-                            {active && <ChevronRight size={12} className="opacity-50 shrink-0" />}
+                            {active && (
+                              <span
+                                className="w-[3px] h-4 rounded-full shrink-0"
+                                style={{ background: 'var(--sidebar-active-bar)' }}
+                              />
+                            )}
                           </>
                         )}
                         {compact && badgeCount > 0 && (
