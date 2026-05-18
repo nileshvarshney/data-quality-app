@@ -271,17 +271,16 @@ export default function Sidebar() {
     )}>
 
       {/* ── Brand header ── */}
-      <div className="shrink-0 relative overflow-hidden" style={{ borderBottom: '1px solid var(--sidebar-border)' }}>
-
-        {/* 3-stop gradient accent stripe */}
-        <div className="absolute top-0 inset-x-0 h-[3px] bg-gradient-to-r from-indigo-400 via-violet-500 to-purple-600" />
-
+      <div
+        className="shrink-0"
+        style={{ background: 'var(--sidebar-header-bg)', borderBottom: '1px solid var(--sidebar-header-border)' }}
+      >
         {compact ? (
-          /* ── Compact: centred logo + collapse button ── */
+          /* ── Compact: centred logo + expand button ── */
           <div className="flex flex-col items-center gap-2 py-4">
-            <div className="w-9 h-9 rounded-xl overflow-hidden shadow-lg ring-1 ring-black/10">
+            <div className="w-8 h-8 rounded-lg overflow-hidden bg-[#0f172a]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo-icon.svg" alt="DG" width={36} height={36} className="w-full h-full" />
+              <img src="/logo-icon.svg" alt="DG" width={32} height={32} className="w-full h-full" />
             </div>
             <button
               onClick={toggleCompact}
@@ -293,66 +292,64 @@ export default function Sidebar() {
           </div>
         ) : (
           /* ── Expanded: full brand block ── */
-          <div className="px-4 pt-5 pb-4">
+          <div className="px-3.5 pt-3.5 pb-3">
 
             {/* Row 1: logo + wordmark + collapse */}
-            <div className="flex items-center gap-3">
-
-              {/* Logo + Wordmark — click to go home */}
-              <Link href="/dashboard/global" className="flex items-center gap-3 flex-1 min-w-0 group">
-                <div className="shrink-0 w-10 h-10 rounded-xl overflow-hidden shadow-lg ring-1 ring-black/8">
+            <div className="flex items-center gap-2.5">
+              <Link href="/dashboard/global" className="flex items-center gap-2.5 flex-1 min-w-0">
+                <div className="shrink-0 w-8 h-8 rounded-lg overflow-hidden bg-[#0f172a] flex items-center justify-center">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src="/logo-icon.svg"
                     alt="DataGuardian"
-                    width={40} height={40}
+                    width={32} height={32}
                     className="w-full h-full"
                     style={{ imageRendering: 'crisp-edges' }}
                   />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[15px] font-extrabold leading-tight tracking-[-0.4px] whitespace-nowrap">
+                  <p className="text-[13px] font-extrabold leading-tight tracking-[-0.3px] whitespace-nowrap">
                     <span style={{ color: 'var(--sidebar-text)' }}>Data</span>
                     <span style={{ color: '#F59E0B' }}>Guardian</span>
                   </p>
-                  <p className="text-[10px] font-medium mt-0.5 truncate" style={{ color: 'var(--sidebar-subtle)' }}>
+                  <p className="text-[9px] font-medium mt-0.5 tracking-[.05em] uppercase truncate"
+                     style={{ color: 'var(--sidebar-subtle)' }}>
                     Data Quality &amp; Governance
                   </p>
                 </div>
               </Link>
-
-              {/* Collapse button */}
               <button
                 onClick={toggleCompact}
                 title="Collapse sidebar"
-                className="shrink-0 p-1.5 rounded-lg transition-colors [color:var(--sidebar-subtle)] hover:[background-color:var(--sidebar-hover)] hover:[color:var(--sidebar-text)]"
+                className="shrink-0 p-1 rounded-md transition-colors [color:var(--sidebar-subtle)] hover:[background-color:var(--sidebar-hover)] hover:[color:var(--sidebar-text)]"
               >
-                <PanelLeftClose size={14} />
+                <PanelLeftClose size={13} />
               </button>
             </div>
 
-            {/* Row 2: alert pill */}
-            <div className="flex items-center gap-2 mt-2.5">
-              {totalBadges > 0 && (
-                <span className="flex items-center gap-1 text-[9px] font-bold text-red-500">
-                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0" />
-                  {totalBadges} active
-                </span>
-              )}
-              <span className="ml-auto text-[9px]" style={{ color: 'var(--sidebar-subtle)' }}>v0.1</span>
-            </div>
-
-            {/* Row 3: quick search */}
+            {/* Row 2: quick search */}
             <button
               onClick={() => window.dispatchEvent(
                 new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true })
               )}
-              className="mt-3 w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[11px] transition-colors border [border-color:var(--sidebar-border)] [color:var(--sidebar-subtle)] hover:[background-color:var(--sidebar-hover)] hover:[color:var(--sidebar-text)]"
+              className="mt-2.5 w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10.5px] transition-colors border [background-color:var(--sidebar-hover)] [border-color:var(--sidebar-divider)] [color:var(--sidebar-subtle)] hover:[color:var(--sidebar-text)]"
             >
               <Search size={11} />
               <span className="flex-1 text-left">Quick search…</span>
-              <kbd className="text-[9px] font-mono opacity-40 bg-gray-100 dark:bg-white/10 px-1 py-0.5 rounded">⌘K</kbd>
+              <kbd className="text-[9px] font-mono border px-1 py-0.5 rounded opacity-50 [background-color:var(--sidebar-header-bg)] [border-color:var(--sidebar-divider)]">⌘K</kbd>
             </button>
+
+            {/* Row 3: version + live alert dot */}
+            <div className="flex items-center mt-2 px-0.5">
+              <span className="text-[9px] opacity-50" style={{ color: 'var(--sidebar-subtle)' }}>v0.1</span>
+              {totalBadges > 0 && (
+                <span className="ml-auto flex items-center gap-1 text-[9px] font-bold text-red-500">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0" />
+                  {totalBadges} active
+                </span>
+              )}
+            </div>
+
           </div>
         )}
       </div>
