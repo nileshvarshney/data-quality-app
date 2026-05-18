@@ -34,8 +34,7 @@ jobs:
           NEXT_PUBLIC_APP_ENV: production
 
       - name: Deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: 01da8b0b75c1b837318ce5caa03f2a1d
-          command: pages deploy frontend/out --project-name dq-platform --branch main
+        run: npx wrangler@latest pages deploy frontend/out --project-name dq-platform --branch main
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 01da8b0b75c1b837318ce5caa03f2a1d
