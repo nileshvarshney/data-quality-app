@@ -2,9 +2,48 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 from sqlalchemy import create_engine, text
+from sqlalchemy.ext.compiler import compiles
+from sqlalchemy.sql.dml import Insert
 from sqlalchemy.orm import sessionmaker, Session, DeclarativeBase
 from snowflake.sqlalchemy import URL as SnowflakeURL
 from app.core.config import settings
+
+
+@compiles(Insert, 'snowflake')
+def _snowflake_insert_as_select(insert_stmt, compiler, **kw):
+    """Snowflake rejects function calls (PARSE_JSON, TO_VARIANT) in VALUES clauses
+    but allows them in SELECT. For any table that has JSONVariant columns we convert
+    the generated INSERT…VALUES to INSERT…SELECT so bind_expression function calls work."""
+    # Import here to avoid circular import (models.py imports from database.py)
+    from app.db.models import JSONVariant
+
+    table = insert_stmt.table
+    has_variant = any(isinstance(col.type, JSONVariant) for col in table.columns)
+
+    # Generate standard SQL first (INSERT ... VALUES (...))
+    std_sql: str = compiler.visit_insert(insert_stmt, **kw)
+
+    if not has_variant:
+        return std_sql
+
+    # Convert "INSERT INTO t (...) VALUES (\n    a, b, c\n)" →
+    #         "INSERT INTO t (...) SELECT \n    a, b, c\n"
+    upper = std_sql.upper()
+    values_pos = upper.rfind(' VALUES ')
+    if values_pos == -1:
+        return std_sql  # unexpected; fall back to standard form
+
+    before = std_sql[:values_pos]
+    after = std_sql[values_pos + len(' VALUES '):]  # "(a, b, c)"
+
+    # Strip the outer parentheses from the VALUES list
+    after = after.strip()
+    if after.startswith('(') and after.endswith(')'):
+        inner = after[1:-1]
+    else:
+        return std_sql  # can't safely transform
+
+    return f"{before} SELECT {inner}"
 
 _log = logging.getLogger(__name__)
 

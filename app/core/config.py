@@ -91,7 +91,7 @@ class Settings(BaseSettings):
     snowflake_pool_max_size: int = 5
     snowflake_pool_acquire_timeout: float = 30.0
 
-    model_config = {"env_file": None, "case_sensitive": False}
+    model_config = {"env_file": ".env", "case_sensitive": False}
 
     def is_weak_secret_key(self) -> bool:
         return self.secret_key.lower() in _WEAK_SECRET_KEYS or len(self.secret_key) < 32

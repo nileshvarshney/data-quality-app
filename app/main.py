@@ -87,9 +87,9 @@ async def lifespan(app: FastAPI):
             await load_all_schedules(db)
 
     try:
-        await asyncio.wait_for(_init_db(), timeout=20)
+        await asyncio.wait_for(_init_db(), timeout=120)
     except asyncio.TimeoutError:
-        logger.error("Database connection timed out (>20s) during startup — server starting without DB")
+        logger.error("Database connection timed out (>120s) during startup — server starting without DB")
         start_scheduler()
     except Exception as e:
         logger.error(f"Startup initialization failed (DB may be unavailable): {e}")

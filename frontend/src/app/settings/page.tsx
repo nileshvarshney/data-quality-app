@@ -176,17 +176,50 @@ const EMPTY_CONN = {
 
 function ConnectionForm({
   initial,
+  connectionId,
   onSave,
   onCancel,
 }: {
   initial?: Partial<typeof EMPTY_CONN>
+  connectionId?: string
   onSave: (data: typeof EMPTY_CONN) => Promise<void>
   onCancel: () => void
 }) {
   const [form, setForm] = useState({ ...EMPTY_CONN, ...initial })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [testStatus, setTestStatus] = useState<TestStatus>({ status: 'idle', message: '' })
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }))
+
+  const handleTest = async () => {
+    if (!form.account || !form.sf_user) {
+      setTestStatus({ status: 'error', message: 'Account and user are required to test.' })
+      return
+    }
+    setTestStatus({ status: 'testing', message: '' })
+    try {
+      let res
+      if (form.password && form.password !== MASKED) {
+        res = await connectionsApi.testCredentials({
+          account: form.account,
+          sf_user: form.sf_user,
+          password: form.password,
+          warehouse: form.warehouse || 'DQ_EXECUTION_WH',
+          role: form.role || undefined,
+          default_database: form.default_database || undefined,
+          default_schema: form.default_schema || undefined,
+        })
+      } else if (connectionId) {
+        res = await connectionsApi.test(connectionId)
+      } else {
+        setTestStatus({ status: 'error', message: 'Enter a password to test the connection.' })
+        return
+      }
+      setTestStatus({ status: res.data.status, message: res.data.message })
+    } catch (e: any) {
+      setTestStatus({ status: 'error', message: e.response?.data?.detail || e.message })
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -243,11 +276,17 @@ function ConnectionForm({
           <input className={inputCls} value={form.description} onChange={e => set('description', e.target.value)} placeholder="e.g. Production Snowflake for Revenue data" />
         </div>
       </div>
+      <TestBanner status={testStatus} />
       <div className="flex gap-3">
         <button type="submit" disabled={saving}
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50">
           {saving ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle size={13} />}
           {saving ? 'Saving…' : 'Save Connection'}
+        </button>
+        <button type="button" onClick={handleTest} disabled={testStatus.status === 'testing'}
+          className="flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50">
+          {testStatus.status === 'testing' ? <Loader2 size={13} className="animate-spin" /> : <Wifi size={13} />}
+          {testStatus.status === 'testing' ? 'Testing…' : 'Test Connection'}
         </button>
         <button type="button" onClick={onCancel}
           className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">
@@ -361,6 +400,7 @@ function ConnectionCard({
               default_schema: conn.default_schema ?? '',
               description: conn.description ?? '',
             }}
+            connectionId={conn.connection_id}
             onSave={handleSave}
             onCancel={() => setEditing(false)}
           />
@@ -527,9 +567,9 @@ function SnowflakeTab() {
 
   // Platform credentials
   const [creds, setCreds] = useState({
-    snowflake_account: '', snowflake_user: '', snowflake_password: '',
-    snowflake_warehouse: 'DQ_EXECUTION_WH', snowflake_role: 'DQ_PLATFORM_ROLE',
-    snowflake_database: '', snowflake_schema: 'PUBLIC',
+    sf_platform_account: '', sf_platform_user: '', sf_platform_password: '',
+    sf_platform_warehouse: 'DQ_EXECUTION_WH', sf_platform_role: 'DQ_PLATFORM_ROLE',
+    snowflake_app_database: '', snowflake_app_schema: 'PUBLIC',
   })
   const [hasPassword, setHasPassword] = useState(false)
   const [credSaving, setCredSaving] = useState(false)
@@ -547,15 +587,15 @@ function SnowflakeTab() {
       const all: Record<string, any> = {}
       Object.values(cfgRes.data.config as Record<string, any[]>).flat().forEach((e: any) => { all[e.key] = e })
       setCreds({
-        snowflake_account:   all['snowflake_account']?.value   ?? '',
-        snowflake_user:      all['snowflake_user']?.value      ?? '',
-        snowflake_password:  '',
-        snowflake_warehouse: all['snowflake_warehouse']?.value ?? 'DQ_EXECUTION_WH',
-        snowflake_role:      all['snowflake_role']?.value      ?? 'DQ_PLATFORM_ROLE',
-        snowflake_database:  all['snowflake_database']?.value  ?? '',
-        snowflake_schema:    all['snowflake_schema']?.value    ?? 'PUBLIC',
+        sf_platform_account:   all['sf_platform_account']?.value   ?? '',
+        sf_platform_user:      all['sf_platform_user']?.value      ?? '',
+        sf_platform_password:  '',
+        sf_platform_warehouse: all['sf_platform_warehouse']?.value ?? 'DQ_EXECUTION_WH',
+        sf_platform_role:      all['sf_platform_role']?.value      ?? 'DQ_PLATFORM_ROLE',
+        snowflake_app_database: all['snowflake_app_database']?.value ?? '',
+        snowflake_app_schema:   all['snowflake_app_schema']?.value  ?? 'PUBLIC',
       })
-      setHasPassword(all['snowflake_password']?.has_value ?? false)
+      setHasPassword(all['sf_platform_password']?.has_value ?? false)
     } finally { setLoading(false) }
   }, [])
 
@@ -572,7 +612,7 @@ function SnowflakeTab() {
     try {
       const updates: Record<string, string> = {}
       Object.entries(creds).forEach(([k, v]) => {
-        if (k === 'snowflake_password' && v === '') return
+        if (k === 'sf_platform_password' && v === '') return
         updates[k] = v
       })
       await configApi.bulkUpdate(updates)
@@ -611,14 +651,14 @@ function SnowflakeTab() {
               <div className="grid grid-cols-2 gap-x-4 gap-y-4 mb-5">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 dark:text-[var(--text-3)] mb-1">Account *</label>
-                  <input className={credInputCls} value={creds.snowflake_account}
-                    onChange={e => setCreds(c => ({ ...c, snowflake_account: e.target.value }))}
+                  <input className={credInputCls} value={creds.sf_platform_account}
+                    onChange={e => setCreds(c => ({ ...c, sf_platform_account: e.target.value }))}
                     placeholder="myorg-myaccount or xy12345.us-east-1.aws" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 dark:text-[var(--text-3)] mb-1">User *</label>
-                  <input className={credInputCls} value={creds.snowflake_user}
-                    onChange={e => setCreds(c => ({ ...c, snowflake_user: e.target.value }))}
+                  <input className={credInputCls} value={creds.sf_platform_user}
+                    onChange={e => setCreds(c => ({ ...c, sf_platform_user: e.target.value }))}
                     placeholder="SERVICE_ACCOUNT" />
                 </div>
                 <div>
@@ -626,33 +666,33 @@ function SnowflakeTab() {
                     Password {hasPassword ? '(stored — leave blank to keep)' : '*'}
                   </label>
                   <SecretInput
-                    value={creds.snowflake_password}
-                    onChange={v => setCreds(c => ({ ...c, snowflake_password: v }))}
+                    value={creds.sf_platform_password}
+                    onChange={v => setCreds(c => ({ ...c, sf_platform_password: v }))}
                     placeholder={hasPassword ? 'Leave blank to keep existing' : 'Enter password'}
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 dark:text-[var(--text-3)] mb-1">Warehouse</label>
-                  <input className={credInputCls} value={creds.snowflake_warehouse}
-                    onChange={e => setCreds(c => ({ ...c, snowflake_warehouse: e.target.value }))}
+                  <input className={credInputCls} value={creds.sf_platform_warehouse}
+                    onChange={e => setCreds(c => ({ ...c, sf_platform_warehouse: e.target.value }))}
                     placeholder="DQ_EXECUTION_WH" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 dark:text-[var(--text-3)] mb-1">Role</label>
-                  <input className={credInputCls} value={creds.snowflake_role}
-                    onChange={e => setCreds(c => ({ ...c, snowflake_role: e.target.value }))}
+                  <input className={credInputCls} value={creds.sf_platform_role}
+                    onChange={e => setCreds(c => ({ ...c, sf_platform_role: e.target.value }))}
                     placeholder="DQ_PLATFORM_ROLE" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 dark:text-[var(--text-3)] mb-1">Default Database</label>
-                  <input className={credInputCls} value={creds.snowflake_database}
-                    onChange={e => setCreds(c => ({ ...c, snowflake_database: e.target.value }))}
+                  <input className={credInputCls} value={creds.snowflake_app_database}
+                    onChange={e => setCreds(c => ({ ...c, snowflake_app_database: e.target.value }))}
                     placeholder="MY_DATABASE" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 dark:text-[var(--text-3)] mb-1">Default Schema</label>
-                  <input className={credInputCls} value={creds.snowflake_schema}
-                    onChange={e => setCreds(c => ({ ...c, snowflake_schema: e.target.value }))}
+                  <input className={credInputCls} value={creds.snowflake_app_schema}
+                    onChange={e => setCreds(c => ({ ...c, snowflake_app_schema: e.target.value }))}
                     placeholder="PUBLIC" />
                 </div>
               </div>
@@ -1371,8 +1411,10 @@ export default function SettingsPage() {
   const [oauthTest, setOauthTest]       = useState<TestStatus>({ status: 'idle', message: '' })
   const { setTimezone } = useTimezone()
 
-  // Platform connection test status
+  // Platform connection state
   const [platformTestStatus, setPlatformTestStatus] = useState<TestStatus>({ status: 'idle', message: '' })
+  const [platformEditing, setPlatformEditing] = useState(false)
+  const [platformHasPassword, setPlatformHasPassword] = useState(false)
 
   // Target database state
   const [primaryTarget, setPrimaryTargetState] = useState<SFConnection | null>(null)
@@ -1400,10 +1442,15 @@ export default function SettingsPage() {
       const grouped: CategoryMap = res.data.config
       setConfig(grouped)
       const initial: Record<string, string> = {}
-      Object.values(grouped).flat().forEach(e => {
+      const flat: any[] = Object.values(grouped).flat()
+      flat.forEach(e => {
         initial[e.key] = e.is_secret ? '' : (e.value ?? '')
       })
+      const pwEntry = flat.find(e => e.key === 'sf_platform_password')
+      setPlatformHasPassword(pwEntry?.has_value ?? false)
       setEdits(initial)
+    } catch {
+      // DB not yet reachable (bootstrap state) — fields stay blank so the user can fill them in
     } finally { setLoading(false) }
   }, [])
 
@@ -1573,53 +1620,126 @@ export default function SettingsPage() {
                 These are the Snowflake credentials used by the platform to store its own tables (rules, runs, users, etc.).
                 Changes take effect after restarting the server.
               </SectionNote>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <FieldLabel label="Account" hint="e.g. myorg-myaccount or xy12345.us-east-1.aws" />
-                  <input className={inputCls} value={edits['sf_platform_account'] ?? ''} onChange={e => set('sf_platform_account', e.target.value)} placeholder="myorg-myaccount" />
+
+              {/* Detail card (read-only view) */}
+              {!platformEditing && (
+                <div className="border border-gray-200 rounded-xl p-4">
+                  <div className="flex items-start justify-between gap-4 mb-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-gray-900">{val('sf_platform_account') || '(not configured)'}</span>
+                        <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-800">Platform</span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-0.5 font-mono">{val('sf_platform_user') || '—'}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        onClick={async () => {
+                          setPlatformTestStatus({ status: 'testing', message: '' })
+                          try {
+                            const res = await configApi.testPlatformConnection({})
+                            setPlatformTestStatus({ status: res.data.status, message: res.data.message })
+                          } catch (e: any) {
+                            setPlatformTestStatus({ status: 'error', message: e.response?.data?.detail || e.message })
+                          }
+                        }}
+                        className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600">
+                        <Wifi size={12} /> Test
+                      </button>
+                      <button
+                        onClick={() => setPlatformEditing(true)}
+                        className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600">
+                        <Pencil size={12} /> Edit
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Connection metadata grid */}
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    {[
+                      { label: 'Warehouse',   value: val('sf_platform_warehouse') || '—' },
+                      { label: 'Role',        value: val('sf_platform_role') || '(default)' },
+                      { label: 'Password',    value: platformHasPassword ? '●●●●●●●●' : 'Not set' },
+                      { label: 'App Database',value: val('snowflake_app_database') || '—' },
+                      { label: 'App Schema',  value: val('snowflake_app_schema') || '—' },
+                    ].map(({ label, value }) => (
+                      <div key={label} className="bg-gray-50 rounded-lg px-2.5 py-1.5">
+                        <p className="text-gray-400">{label}</p>
+                        <p className="font-medium text-gray-700 font-mono truncate">{value}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-3">
+                    <TestBanner status={platformTestStatus} />
+                  </div>
                 </div>
-                <div>
-                  <FieldLabel label="User" hint="Service account username" />
-                  <input className={inputCls} value={edits['sf_platform_user'] ?? ''} onChange={e => set('sf_platform_user', e.target.value)} placeholder="dq_platform_user" />
-                </div>
-                <div>
-                  <FieldLabel label="Password" hint="Leave blank to keep existing" />
-                  <SecretInput value={edits['sf_platform_password'] ?? ''} onChange={v => set('sf_platform_password', v)} placeholder="(unchanged)" />
-                </div>
-                <div>
-                  <FieldLabel label="Warehouse" />
-                  <input className={inputCls} value={edits['sf_platform_warehouse'] ?? ''} onChange={e => set('sf_platform_warehouse', e.target.value)} placeholder="COMPUTE_WH" />
-                </div>
-                <div>
-                  <FieldLabel label="Role" hint="Optional — uses account default if blank" />
-                  <input className={inputCls} value={edits['sf_platform_role'] ?? ''} onChange={e => set('sf_platform_role', e.target.value)} placeholder="ACCOUNTADMIN" />
-                </div>
-                <div>
-                  <FieldLabel label="App Database" hint="Database where platform tables live" />
-                  <input className={inputCls} value={edits['snowflake_app_database'] ?? ''} onChange={e => set('snowflake_app_database', e.target.value)} placeholder="DQ_PLATFORM_DB" />
-                </div>
-                <div>
-                  <FieldLabel label="App Schema" />
-                  <input className={inputCls} value={edits['snowflake_app_schema'] ?? ''} onChange={e => set('snowflake_app_schema', e.target.value)} placeholder="DQ_APP" />
-                </div>
-              </div>
-              <div className="flex items-center gap-3 pt-2">
-                <SaveBar saving={saving} saved={saved} onSave={handleSave} />
-                <button
-                  onClick={async () => {
-                    setPlatformTestStatus({ status: 'testing', message: '' })
-                    try {
-                      const res = await configApi.testPlatformConnection()
-                      setPlatformTestStatus({ status: res.data.status, message: res.data.message })
-                    } catch (e: any) {
-                      setPlatformTestStatus({ status: 'error', message: e.message })
-                    }
-                  }}
-                  className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600">
-                  <Wifi size={14} /> Test Connection
-                </button>
-              </div>
-              <TestBanner status={platformTestStatus} />
+              )}
+
+              {/* Edit form */}
+              {platformEditing && (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <FieldLabel label="Account" hint="e.g. myorg-myaccount or xy12345.us-east-1.aws" />
+                      <input className={inputCls} value={edits['sf_platform_account'] ?? ''} onChange={e => set('sf_platform_account', e.target.value)} placeholder="myorg-myaccount" />
+                    </div>
+                    <div>
+                      <FieldLabel label="User" hint="Service account username" />
+                      <input className={inputCls} value={edits['sf_platform_user'] ?? ''} onChange={e => set('sf_platform_user', e.target.value)} placeholder="dq_platform_user" />
+                    </div>
+                    <div>
+                      <FieldLabel label="Password" hint="Leave blank to keep existing" />
+                      <SecretInput value={edits['sf_platform_password'] ?? ''} onChange={v => set('sf_platform_password', v)} placeholder="(unchanged)" />
+                    </div>
+                    <div>
+                      <FieldLabel label="Warehouse" />
+                      <input className={inputCls} value={edits['sf_platform_warehouse'] ?? ''} onChange={e => set('sf_platform_warehouse', e.target.value)} placeholder="COMPUTE_WH" />
+                    </div>
+                    <div>
+                      <FieldLabel label="Role" hint="Optional — uses account default if blank" />
+                      <input className={inputCls} value={edits['sf_platform_role'] ?? ''} onChange={e => set('sf_platform_role', e.target.value)} placeholder="ACCOUNTADMIN" />
+                    </div>
+                    <div>
+                      <FieldLabel label="App Database" hint="Database where platform tables live" />
+                      <input className={inputCls} value={edits['snowflake_app_database'] ?? ''} onChange={e => set('snowflake_app_database', e.target.value)} placeholder="DQ_PLATFORM_DB" />
+                    </div>
+                    <div>
+                      <FieldLabel label="App Schema" />
+                      <input className={inputCls} value={edits['snowflake_app_schema'] ?? ''} onChange={e => set('snowflake_app_schema', e.target.value)} placeholder="DQ_APP" />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 pt-2">
+                    <SaveBar saving={saving} saved={saved} onSave={async () => { await handleSave(); setPlatformEditing(false) }} />
+                    <button
+                      onClick={async () => {
+                        setPlatformTestStatus({ status: 'testing', message: '' })
+                        try {
+                          const creds = {
+                            account:   val('sf_platform_account')   || undefined,
+                            user:      val('sf_platform_user')      || undefined,
+                            password:  val('sf_platform_password')  || undefined,
+                            warehouse: val('sf_platform_warehouse') || undefined,
+                            role:      val('sf_platform_role')      || undefined,
+                          }
+                          const res = await configApi.testPlatformConnection(creds)
+                          setPlatformTestStatus({ status: res.data.status, message: res.data.message })
+                        } catch (e: any) {
+                          setPlatformTestStatus({ status: 'error', message: e.response?.data?.detail || e.message })
+                        }
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600">
+                      <Wifi size={14} /> Test Connection
+                    </button>
+                    <button
+                      onClick={() => { setPlatformEditing(false); setPlatformTestStatus({ status: 'idle', message: '' }) }}
+                      className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-500">
+                      Cancel
+                    </button>
+                  </div>
+                  <TestBanner status={platformTestStatus} />
+                </>
+              )}
             </div>
           )}
 

@@ -1,10 +1,9 @@
-"""Catalog service — materialized view refresh and result enrichment."""
+"""Catalog service — search enrichment."""
 import logging
-import time
 from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, text
+from sqlalchemy import select, func
 
 logger = logging.getLogger("dq_platform.catalog")
 
@@ -12,23 +11,9 @@ _utcnow = lambda: datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 async def refresh_search_index(db: AsyncSession) -> int:
-    """
-    REFRESH MATERIALIZED VIEW CONCURRENTLY catalog_search_index.
-    Returns elapsed milliseconds. Safe to call while reads are in progress.
-    Falls back gracefully if the view does not exist yet.
-    """
-    start = time.monotonic()
-    try:
-        await db.execute(
-            text("REFRESH MATERIALIZED VIEW CONCURRENTLY catalog_search_index")
-        )
-        await db.commit()
-    except Exception as exc:
-        logger.warning("catalog_search_index refresh failed: %s", exc)
-        await db.rollback()
-    elapsed = int((time.monotonic() - start) * 1000)
-    logger.info("catalog_search_index refreshed in %dms", elapsed)
-    return elapsed
+    """No-op on Snowflake — materialized views are not supported."""
+    logger.info("catalog_search_index refresh skipped (not supported on Snowflake)")
+    return 0
 
 
 async def enrich_asset_results(asset_ids: list[str], db: AsyncSession) -> dict:

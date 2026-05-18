@@ -1,6 +1,10 @@
 /** @type {import('next').NextConfig} */
+const isProd = process.env.NODE_ENV === 'production'
+
 const nextConfig = {
-  output: 'export',
+  // Static export only for production (Cloudflare Pages).
+  // In dev, the constraint blocks direct navigation to dynamic UUID routes.
+  output: isProd ? 'export' : undefined,
   trailingSlash: true,
   reactStrictMode: true,
 

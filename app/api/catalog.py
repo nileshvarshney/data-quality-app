@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -13,7 +12,7 @@ from app.db.database import get_db
 from app.db.models import (
     DataAsset, GlossaryTerm, DataProduct, AssetUsage,
     DQQualityScore, DataClassification, GlossaryTermAsset,
-    Domain, AssetTag, Tag,
+    Domain, AssetTag, Tag, SavedSearch,
 )
 from app.core.security import get_current_user, require_admin
 from app.services.catalog_service import refresh_search_index, enrich_asset_results
@@ -41,8 +40,10 @@ async def _search_via_ilike(
     certification: Optional[str],
     limit: int,
     offset: int,
+    owner: Optional[str] = None,
+    restrict_asset_ids: Optional[set[str]] = None,
 ) -> tuple[list[dict], int]:
-    """ILIKE fallback when catalog_search_index is unavailable."""
+    """Snowflake-compatible ILIKE-based catalog search."""
     domain_names = await _domain_map(db)
     results: list[dict] = []
     pattern = f"%{q}%" if q else "%"
@@ -59,6 +60,13 @@ async def _search_via_ilike(
             q_stmt = q_stmt.where(DataAsset.domain_id == domain_id)
         if certification:
             q_stmt = q_stmt.where(DataAsset.certification_status == certification)
+        if owner:
+            q_stmt = q_stmt.where(
+                DataAsset.owner_name.ilike(f"%{owner}%")
+                | DataAsset.owner_email.ilike(f"%{owner}%")
+            )
+        if restrict_asset_ids is not None:
+            q_stmt = q_stmt.where(DataAsset.asset_id.in_(restrict_asset_ids))
         for a in (await db.execute(q_stmt)).scalars().all():
             results.append({
                 "entity_type": "asset", "id": a.asset_id,
@@ -148,109 +156,50 @@ async def catalog_search(
         )
         tag_ids = {r.entity_id for r in tag_result.all()}
 
-    try:
-        where_clauses = ["1=1"]
-        params: dict = {}
+    # Early out for empty filter sets (intersection will be empty)
+    if class_ids is not None and not class_ids:
+        return {"results": [], "total": 0, "page": page, "page_size": page_size}
+    if tag_ids is not None and not tag_ids:
+        return {"results": [], "total": 0, "page": page, "page_size": page_size}
 
-        if q and q.strip():
-            where_clauses.append("search_vector @@ plainto_tsquery('english', :q)")
-            params["q"] = q.strip()
+    # Combine asset ID restrictions from classification and tag filters
+    restrict_asset_ids: Optional[set[str]] = None
+    if class_ids is not None and tag_ids is not None:
+        restrict_asset_ids = class_ids & tag_ids
+        if not restrict_asset_ids:
+            return {"results": [], "total": 0, "page": page, "page_size": page_size}
+    elif class_ids is not None:
+        restrict_asset_ids = class_ids
+    elif tag_ids is not None:
+        restrict_asset_ids = tag_ids
 
-        if effective_type:
-            where_clauses.append("entity_type = :etype")
-            params["etype"] = effective_type
+    # Fetch all matching results then paginate after sort + enrich
+    all_results, _ = await _search_via_ilike(
+        db, q or "", effective_type, domain_id, certification,
+        limit=10000, offset=0,
+        owner=owner, restrict_asset_ids=restrict_asset_ids,
+    )
 
-        if domain_id:
-            where_clauses.append("domain_id = :domain_id")
-            params["domain_id"] = domain_id
-
-        if certification:
-            where_clauses.append("certification_status = :cert")
-            params["cert"] = certification
-
-        if owner:
-            where_clauses.append("owner ILIKE :owner")
-            params["owner"] = f"%{owner}%"
-
-        if class_ids is not None:
-            if not class_ids:
-                return {"results": [], "total": 0, "page": page, "page_size": page_size}
-            where_clauses.append("entity_id = ANY(:class_ids) AND entity_type = 'asset'")
-            params["class_ids"] = list(class_ids)
-
-        if tag_ids is not None:
-            if not tag_ids:
-                return {"results": [], "total": 0, "page": page, "page_size": page_size}
-            where_clauses.append("entity_id = ANY(:tag_ids) AND entity_type = 'asset'")
-            params["tag_ids"] = list(tag_ids)
-
-        where_sql = " AND ".join(where_clauses)
-
-        if sort == "relevance" and q and q.strip():
-            order_sql = "ts_rank(search_vector, plainto_tsquery('english', :q)) DESC"
-        elif sort == "alphabetical":
-            order_sql = "title ASC"
+    # Enrich asset results
+    asset_ids = [r["id"] for r in all_results if r["entity_type"] == "asset"]
+    enrichment = await enrich_asset_results(asset_ids, db)
+    _empty_enrich = {"quality_score": None, "trust_score": None, "avg_rating": None, "classification_tags": [], "tag_names": []}
+    for r in all_results:
+        if r["entity_type"] == "asset":
+            r.update(enrichment.get(r["id"], _empty_enrich))
         else:
-            order_sql = "title ASC"
+            r.update(_empty_enrich)
 
-        count_result = await db.execute(
-            text(f"SELECT count(*) FROM catalog_search_index WHERE {where_sql}"),
-            params,
-        )
-        total: int = count_result.scalar() or 0
+    # Sort
+    if sort == "quality":
+        all_results.sort(key=lambda x: x.get("quality_score") or 0, reverse=True)
+    elif sort == "trust":
+        all_results.sort(key=lambda x: x.get("trust_score") or 0, reverse=True)
+    elif sort == "alphabetical":
+        all_results.sort(key=lambda x: (x.get("name") or "").lower())
 
-        rows_result = await db.execute(
-            text(
-                f"SELECT entity_type, entity_id, title, domain, description, owner, "
-                f"certification_status, domain_id "
-                f"FROM catalog_search_index "
-                f"WHERE {where_sql} "
-                f"ORDER BY {order_sql} "
-                f"LIMIT :limit OFFSET :offset"
-            ),
-            {**params, "limit": page_size, "offset": offset},
-        )
-        rows = rows_result.mappings().all()
-
-        asset_ids = [r["entity_id"] for r in rows if r["entity_type"] == "asset"]
-        enrichment = await enrich_asset_results(asset_ids, db)
-
-        results = []
-        for r in rows:
-            base = {
-                "entity_type": r["entity_type"],
-                "id": r["entity_id"],
-                "name": r["title"],
-                "description": r["description"],
-                "domain": r["domain"],
-                "owner": r["owner"],
-                "certification_status": r["certification_status"],
-            }
-            if r["entity_type"] == "asset":
-                base.update(enrichment.get(r["entity_id"], {
-                    "quality_score": None, "trust_score": None,
-                    "avg_rating": None, "classification_tags": [], "tag_names": [],
-                }))
-            else:
-                base.update({
-                    "quality_score": None, "trust_score": None,
-                    "avg_rating": None, "classification_tags": [], "tag_names": [],
-                })
-            results.append(base)
-
-        if sort == "quality":
-            results.sort(key=lambda x: x.get("quality_score") or 0, reverse=True)
-        elif sort == "trust":
-            results.sort(key=lambda x: x.get("trust_score") or 0, reverse=True)
-
-        return {"results": results, "total": total, "page": page, "page_size": page_size}
-
-    except Exception as exc:
-        logger.warning("tsvector search failed (%s), falling back to ILIKE", exc)
-        fallback_results, total = await _search_via_ilike(
-            db, q or "", effective_type, domain_id, certification, page_size, offset
-        )
-        return {"results": fallback_results, "total": total, "page": page, "page_size": page_size}
+    total = len(all_results)
+    return {"results": all_results[offset: offset + page_size], "total": total, "page": page, "page_size": page_size}
 
 
 @router.get("/facets")
@@ -366,19 +315,13 @@ async def create_saved_search(
     user: dict = Depends(get_current_user),
 ):
     search_id = _gen_id()
-    await db.execute(
-        text("""
-            INSERT INTO saved_searches (search_id, user_email, name, query, filters, created_at)
-            VALUES (:id, :email, :name, :query, CAST(:filters AS jsonb), NOW())
-        """),
-        {
-            "id": search_id,
-            "email": user["email"],
-            "name": payload.get("name", "Saved search"),
-            "query": payload.get("query"),
-            "filters": json.dumps(payload.get("filters")) if payload.get("filters") else None,
-        },
-    )
+    db.add(SavedSearch(
+        search_id=search_id,
+        user_email=user["email"],
+        name=payload.get("name", "Saved search"),
+        query=payload.get("query"),
+        filters=payload.get("filters"),
+    ))
     await db.commit()
     return {"search_id": search_id}
 

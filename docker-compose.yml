@@ -23,6 +23,9 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
+      AUTH_REQUIRED: ${AUTH_REQUIRED:-false}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:

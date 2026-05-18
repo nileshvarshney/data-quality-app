@@ -101,6 +101,58 @@ def _open_connector(conn: SnowflakeConnection):
     return snowflake.connector.connect(**kwargs)
 
 
+# ── Test credentials without saving ──────────────────────────────────────────
+
+class ConnectionTestCredentials(BaseModel):
+    account: str
+    sf_user: str
+    password: str
+    warehouse: str = "DQ_EXECUTION_WH"
+    role: str | None = None
+    default_database: str | None = None
+    default_schema: str | None = None
+
+
+@router.post("/test-credentials")
+async def test_credentials(payload: ConnectionTestCredentials):
+    """Test Snowflake credentials inline without saving a connection record."""
+    if not payload.account or not payload.sf_user or not payload.password:
+        return {"status": "error", "message": "Account, user, and password are required"}
+
+    def _run():
+        import snowflake.connector
+        kwargs = dict(
+            account=payload.account,
+            user=payload.sf_user,
+            password=payload.password,
+            warehouse=payload.warehouse or "DQ_EXECUTION_WH",
+        )
+        if payload.role:
+            kwargs["role"] = payload.role
+        if payload.default_database:
+            kwargs["database"] = payload.default_database
+        if payload.default_schema:
+            kwargs["schema"] = payload.default_schema
+        sf = snowflake.connector.connect(**kwargs)
+        cur = sf.cursor()
+        cur.execute("SELECT CURRENT_VERSION(), CURRENT_ROLE(), CURRENT_WAREHOUSE()")
+        row = cur.fetchone()
+        cur.close()
+        sf.close()
+        return row
+
+    try:
+        row = await asyncio.to_thread(_run)
+        return {
+            "status": "ok",
+            "message": f"Connected successfully (Snowflake {row[0]})",
+            "role": row[1],
+            "warehouse": row[2],
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
 # ── CRUD ──────────────────────────────────────────────────────────────────────
 
 @router.post("")

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -36,14 +37,42 @@ async def get_platform_info(db: AsyncSession = Depends(get_db)):
     return data
 
 
+class PlatformConnectionTest(BaseModel):
+    account: str = ""
+    user: str = ""
+    password: str = ""
+    warehouse: str = ""
+    role: str = ""
+
+
 @router.post("/test/platform-connection")
-async def test_platform_connection(db: AsyncSession = Depends(get_db)):
-    """Test the platform Snowflake connection using credentials stored in AppConfig."""
-    account  = await config_service.get_value("sf_platform_account", db)
-    user     = await config_service.get_value("sf_platform_user", db)
-    password = await config_service.get_value("sf_platform_password", db)
-    warehouse= await config_service.get_value("sf_platform_warehouse", db)
-    role     = await config_service.get_value("sf_platform_role", db)
+async def test_platform_connection(payload: PlatformConnectionTest = PlatformConnectionTest()):
+    """Test the platform Snowflake connection.
+
+    Accepts credentials in the request body. Falls back to DB-stored values,
+    then to env vars — so this works even before the DB is reachable.
+    """
+    body = payload
+
+    # Resolve each credential: body → DB → settings
+    async def resolve(key: str, body_val: str, settings_val: str) -> str:
+        if body_val:
+            return body_val
+        try:
+            from app.db.database import get_session_ctx
+            async with get_session_ctx() as session:
+                db_val = await config_service.get_value(key, session)
+                if db_val:
+                    return db_val
+        except Exception:
+            pass
+        return settings_val or ""
+
+    account  = await resolve("sf_platform_account",   body.account,   settings.sf_platform_account)
+    user     = await resolve("sf_platform_user",      body.user,      settings.sf_platform_user)
+    password = await resolve("sf_platform_password",  body.password,  settings.sf_platform_password)
+    warehouse= await resolve("sf_platform_warehouse", body.warehouse, settings.sf_platform_warehouse)
+    role     = await resolve("sf_platform_role",      body.role,      settings.sf_platform_role)
 
     if not account or not user or not password:
         return {"status": "error", "message": "Account, user, and password are required"}
@@ -54,10 +83,10 @@ async def test_platform_connection(db: AsyncSession = Depends(get_db)):
                       warehouse=warehouse or "COMPUTE_WH")
         if role:
             kwargs["role"] = role
-        conn = snowflake.connector.connect(**kwargs)
+        conn = await asyncio.to_thread(snowflake.connector.connect, **kwargs)
         cur = conn.cursor()
-        cur.execute("SELECT CURRENT_VERSION(), CURRENT_ROLE(), CURRENT_WAREHOUSE()")
-        row = cur.fetchone()
+        await asyncio.to_thread(cur.execute, "SELECT CURRENT_VERSION(), CURRENT_ROLE(), CURRENT_WAREHOUSE()")
+        row = await asyncio.to_thread(cur.fetchone)
         cur.close()
         conn.close()
         return {

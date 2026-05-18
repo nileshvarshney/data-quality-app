@@ -1,11 +1,46 @@
+import json as _json
 import uuid
 from datetime import datetime, timezone, date
+from snowflake.sqlalchemy import VARIANT
 from sqlalchemy import (
     String, Boolean, Float, Integer, BigInteger, SmallInteger, Text, DateTime,
-    JSON, ForeignKey, Date, Index, UniqueConstraint,
+    ForeignKey, Date, UniqueConstraint,
 )
+from sqlalchemy import TypeDecorator
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.database import Base
+
+
+class JSONVariant(TypeDecorator):
+    """VARIANT column that transparently handles Python dicts/lists.
+
+    Snowflake rejects plain VARCHAR for VARIANT columns, so we:
+    - serialize dict/list → JSON string on bind
+    - wrap the bind expression with PARSE_JSON() so Snowflake accepts it
+    - deserialize VARIANT → Python dict/list on read (connector returns dict directly)
+    """
+    impl = VARIANT
+    cache_ok = True
+
+    def bind_expression(self, bindvalue):
+        from sqlalchemy import func, case
+        # Snowflake rejects parse_json(null) in VALUES — only wrap non-null values
+        return case((bindvalue.is_(None), None), else_=func.parse_json(bindvalue))
+
+    def process_bind_param(self, value, dialect):
+        if value is not None:
+            return _json.dumps(value)
+        return value
+
+    def process_result_value(self, value, dialect):
+        if isinstance(value, (dict, list)):
+            return value
+        if isinstance(value, str):
+            try:
+                return _json.loads(value)
+            except (ValueError, TypeError):
+                return value
+        return value
 
 
 def gen_uuid() -> str:
@@ -20,7 +55,7 @@ class User(Base):
     __tablename__ = "users"
 
     user_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
-    email: Mapped[str] = mapped_column(String(200), unique=True, nullable=False, index=True)
+    email: Mapped[str] = mapped_column(String(200), unique=True, nullable=False)
     hashed_password: Mapped[str] = mapped_column(Text, nullable=False)
     full_name: Mapped[str] = mapped_column(String(200), nullable=False)
     role: Mapped[str] = mapped_column(String(30), nullable=False, default="viewer")
@@ -30,7 +65,7 @@ class User(Base):
     last_login: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # OAuth2 / SSO
     oauth_provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    oauth_id: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
+    oauth_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
 
@@ -109,7 +144,7 @@ class RuleTag(Base):
     __tablename__ = "rule_tags"
 
     tag_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
-    rule_id: Mapped[str] = mapped_column(String(36), ForeignKey("dq_rules.rule_id"), nullable=False, index=True)
+    rule_id: Mapped[str] = mapped_column(String(36), ForeignKey("dq_rules.rule_id"), nullable=False)
     tag_name: Mapped[str] = mapped_column(String(100), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
 
@@ -121,7 +156,7 @@ class SLAConfig(Base):
 
     sla_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     entity_type: Mapped[str] = mapped_column(String(20), nullable=False)
-    entity_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    entity_id: Mapped[str] = mapped_column(String(36), nullable=False)
     min_quality_score: Mapped[float] = mapped_column(Float, default=95.0)
     max_failure_pct: Mapped[float] = mapped_column(Float, default=5.0)
     alert_on_breach: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -145,7 +180,7 @@ class DQRule(Base):
     rule_category: Mapped[str | None] = mapped_column(String(50))
     target_column: Mapped[str | None] = mapped_column(String(200))
     rule_sql: Mapped[str | None] = mapped_column(Text)
-    rule_config: Mapped[dict | None] = mapped_column(JSON)
+    rule_config: Mapped[dict | None] = mapped_column(JSONVariant)
     severity: Mapped[str] = mapped_column(String(20), nullable=False, default="medium")
     status: Mapped[str] = mapped_column(String(30), default="active")
     version: Mapped[int] = mapped_column(Integer, default=1)
@@ -173,14 +208,14 @@ class RuleVersion(Base):
     __tablename__ = "rule_versions"
 
     version_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
-    rule_id: Mapped[str] = mapped_column(String(36), ForeignKey("dq_rules.rule_id"), nullable=False, index=True)
+    rule_id: Mapped[str] = mapped_column(String(36), ForeignKey("dq_rules.rule_id"), nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     rule_name: Mapped[str] = mapped_column(String(200), nullable=False)
     rule_description: Mapped[str | None] = mapped_column(Text)
     rule_type: Mapped[str] = mapped_column(String(50), nullable=False)
     target_column: Mapped[str | None] = mapped_column(String(200))
     rule_sql: Mapped[str | None] = mapped_column(Text)
-    rule_config: Mapped[dict | None] = mapped_column(JSON)
+    rule_config: Mapped[dict | None] = mapped_column(JSONVariant)
     severity: Mapped[str] = mapped_column(String(20), nullable=False)
     status: Mapped[str] = mapped_column(String(30), nullable=False)
     changed_by: Mapped[str | None] = mapped_column(String(200))
@@ -216,14 +251,6 @@ class DQSchedule(Base):
 
 class DQRuleRun(Base):
     __tablename__ = "dq_rule_runs"
-    __table_args__ = (
-        Index("ix_rule_runs_rule_created",   "rule_id",   "created_at"),
-        Index("ix_rule_runs_asset_created",  "asset_id",  "created_at"),
-        Index("ix_rule_runs_domain_status",  "domain_id", "status"),
-        Index("ix_rule_runs_subdomain",      "subdomain_id"),
-        Index("ix_rule_runs_status",         "status"),
-        Index("ix_rule_runs_created_at",     "created_at"),
-    )
 
     run_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     rule_id: Mapped[str] = mapped_column(String(36), ForeignKey("dq_rules.rule_id"), nullable=False)
@@ -253,8 +280,8 @@ class DQRuleRunSample(Base):
 
     sample_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     run_id: Mapped[str] = mapped_column(String(36), ForeignKey("dq_rule_runs.run_id"), nullable=False)
-    rule_id: Mapped[str] = mapped_column(String(36), ForeignKey("dq_rules.rule_id"), nullable=False, index=True)
-    failed_record: Mapped[dict | None] = mapped_column(JSON)
+    rule_id: Mapped[str] = mapped_column(String(36), ForeignKey("dq_rules.rule_id"), nullable=False)
+    failed_record: Mapped[dict | None] = mapped_column(JSONVariant)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
 
     run: Mapped["DQRuleRun"] = relationship("DQRuleRun", back_populates="samples")
@@ -262,12 +289,6 @@ class DQRuleRunSample(Base):
 
 class DQQualityScore(Base):
     __tablename__ = "dq_quality_scores"
-    __table_args__ = (
-        Index("ix_quality_scores_date_level",     "score_date", "score_level"),
-        Index("ix_quality_scores_date_domain",    "score_date", "domain_id"),
-        Index("ix_quality_scores_date_subdomain", "score_date", "subdomain_id"),
-        Index("ix_quality_scores_date_asset",     "score_date", "asset_id"),
-    )
 
     score_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     score_date: Mapped[datetime] = mapped_column(Date, nullable=False)
@@ -289,14 +310,14 @@ class DQAlert(Base):
 
     alert_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    rule_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
-    domain_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    rule_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    domain_id: Mapped[str] = mapped_column(String(36), nullable=False)
     subdomain_id: Mapped[str] = mapped_column(String(36), nullable=False)
     asset_id: Mapped[str] = mapped_column(String(36), nullable=False)
     alert_type: Mapped[str] = mapped_column(String(30), nullable=False, default="rule_failure")
     drift_asset_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     severity: Mapped[str] = mapped_column(String(20), nullable=False)
-    alert_status: Mapped[str] = mapped_column(String(20), default="open", index=True)
+    alert_status: Mapped[str] = mapped_column(String(20), default="open")
     alert_message: Mapped[str | None] = mapped_column(Text)
     notified_to: Mapped[str | None] = mapped_column(String(500))
     notification_channel: Mapped[str | None] = mapped_column(String(50))
@@ -309,14 +330,11 @@ class DQAlert(Base):
 
 class SchemaBaseline(Base):
     __tablename__ = "schema_baselines"
-    __table_args__ = (
-        Index("ix_schema_baselines_asset_status", "asset_id", "status"),
-    )
 
     baseline_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     asset_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_assets.asset_id", ondelete="CASCADE"), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
-    columns_snapshot: Mapped[list | None] = mapped_column(JSON)
+    columns_snapshot: Mapped[list | None] = mapped_column(JSONVariant)
     approved_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
@@ -324,9 +342,6 @@ class SchemaBaseline(Base):
 
 class SchemaDriftEvent(Base):
     __tablename__ = "schema_drift_events"
-    __table_args__ = (
-        Index("ix_drift_events_asset_status", "asset_id", "status"),
-    )
 
     event_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     asset_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_assets.asset_id", ondelete="CASCADE"), nullable=False)
@@ -382,7 +397,7 @@ class ServiceAccount(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False, unique=True)
     description: Mapped[str | None] = mapped_column(Text)
     # First 8 chars of the generated key, stored in clear for fast lookup
-    key_prefix: Mapped[str] = mapped_column(String(8), nullable=False, index=True)
+    key_prefix: Mapped[str] = mapped_column(String(8), nullable=False)
     # bcrypt hash of the full key
     key_hash: Mapped[str] = mapped_column(Text, nullable=False)
     role: Mapped[str] = mapped_column(String(30), nullable=False, default="viewer")
@@ -395,19 +410,14 @@ class ServiceAccount(Base):
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
-    __table_args__ = (
-        Index("ix_audit_logs_created_at",   "created_at"),
-        Index("ix_audit_logs_entity",       "entity_type", "entity_id"),
-        Index("ix_audit_logs_user_email",   "user_email"),
-    )
 
     audit_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     user_email: Mapped[str | None] = mapped_column(String(200))
     action: Mapped[str] = mapped_column(String(100), nullable=False)
     entity_type: Mapped[str] = mapped_column(String(50), nullable=False)
     entity_id: Mapped[str | None] = mapped_column(String(36))
-    old_value: Mapped[dict | None] = mapped_column(JSON)
-    new_value: Mapped[dict | None] = mapped_column(JSON)
+    old_value: Mapped[dict | None] = mapped_column(JSONVariant)
+    new_value: Mapped[dict | None] = mapped_column(JSONVariant)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
 
 
@@ -445,9 +455,6 @@ class GlossaryTermAsset(Base):
 
 class DataClassification(Base):
     __tablename__ = "data_classifications"
-    __table_args__ = (
-        Index("ix_data_classifications_asset", "asset_id"),
-    )
 
     classification_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     asset_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_assets.asset_id"), nullable=False)
@@ -463,7 +470,6 @@ class ColumnMetadata(Base):
     __tablename__ = "column_metadata"
     __table_args__ = (
         UniqueConstraint("asset_id", "column_name", name="uq_col_meta_asset_col"),
-        Index("ix_col_meta_asset", "asset_id"),
     )
 
     col_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
@@ -494,8 +500,6 @@ class ColumnProfileHistory(Base):
     __tablename__ = "column_profile_history"
     __table_args__ = (
         UniqueConstraint("asset_id", "column_name", "profile_date", name="uq_col_profile_history"),
-        Index("ix_col_profile_history_asset_date", "asset_id", "profile_date"),
-        Index("ix_col_profile_history_asset_col_date", "asset_id", "column_name", "profile_date"),
     )
 
     history_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
@@ -539,9 +543,6 @@ class DataProductAsset(Base):
 
 class AssetComment(Base):
     __tablename__ = "asset_comments"
-    __table_args__ = (
-        Index("ix_asset_comments_entity", "entity_type", "entity_id"),
-    )
 
     comment_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     entity_type: Mapped[str] = mapped_column(String(30), nullable=False)
@@ -557,9 +558,6 @@ class AssetComment(Base):
 
 class AssetUsage(Base):
     __tablename__ = "asset_usage"
-    __table_args__ = (
-        Index("ix_asset_usage_asset", "asset_id", "created_at"),
-    )
 
     usage_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     asset_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_assets.asset_id"), nullable=False)
@@ -661,7 +659,7 @@ class AnomalyDetector(Base):
     asset_id: Mapped[str] = mapped_column(String(36), ForeignKey("data_assets.asset_id"), nullable=False)
     column_name: Mapped[str | None] = mapped_column(String(200))
     detector_type: Mapped[str] = mapped_column(String(30), nullable=False)
-    config: Mapped[dict | None] = mapped_column(JSON)
+    config: Mapped[dict | None] = mapped_column(JSONVariant)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     last_trained_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_by: Mapped[str | None] = mapped_column(String(200))
@@ -670,9 +668,6 @@ class AnomalyDetector(Base):
 
 class AnomalyDetection(Base):
     __tablename__ = "anomaly_detections"
-    __table_args__ = (
-        Index("ix_anomaly_detections_asset", "detector_id"),
-    )
 
     detection_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     detector_id: Mapped[str] = mapped_column(String(36), ForeignKey("anomaly_detectors.detector_id"), nullable=False)
@@ -704,9 +699,6 @@ class QualityCostConfig(Base):
 
 class QualityIncident(Base):
     __tablename__ = "quality_incidents"
-    __table_args__ = (
-        Index("ix_quality_incidents_asset", "asset_id"),
-    )
 
     incident_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     title: Mapped[str | None] = mapped_column(String(200))
@@ -715,8 +707,8 @@ class QualityIncident(Base):
     status: Mapped[str] = mapped_column(String(20), default="open")
     trigger_run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     alert_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    rca_report: Mapped[dict | None] = mapped_column(JSON)
-    timeline: Mapped[dict | None] = mapped_column(JSON)
+    rca_report: Mapped[dict | None] = mapped_column(JSONVariant)
+    timeline: Mapped[dict | None] = mapped_column(JSONVariant)
     resolved_by: Mapped[str | None] = mapped_column(String(200))
     ttd_minutes: Mapped[int | None] = mapped_column(Integer)
     ttr_minutes: Mapped[int | None] = mapped_column(Integer)
@@ -768,16 +760,13 @@ class GovernancePolicy(Base):
     description: Mapped[str | None] = mapped_column(Text)
     severity: Mapped[str] = mapped_column(String(20), default="medium")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    config: Mapped[dict | None] = mapped_column(JSON)
+    config: Mapped[dict | None] = mapped_column(JSONVariant)
     created_by: Mapped[str | None] = mapped_column(String(200))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
 
 
 class PolicyViolation(Base):
     __tablename__ = "policy_violations"
-    __table_args__ = (
-        Index("ix_policy_violations_entity", "entity_type", "entity_id"),
-    )
 
     violation_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     policy_id: Mapped[str] = mapped_column(String(36), ForeignKey("governance_policies.policy_id"), nullable=False)
@@ -799,7 +788,7 @@ class DataContract(Base):
     producer_team: Mapped[str | None] = mapped_column(String(200))
     consumer_team: Mapped[str | None] = mapped_column(String(200))
     status: Mapped[str] = mapped_column(String(20), default="draft")
-    schema_json: Mapped[dict | None] = mapped_column(JSON)
+    schema_json: Mapped[dict | None] = mapped_column(JSONVariant)
     min_quality_score: Mapped[float] = mapped_column(Float, default=95.0)
     max_null_pct: Mapped[float | None] = mapped_column(Float)
     max_staleness_hours: Mapped[int] = mapped_column(Integer, default=24)
@@ -819,7 +808,7 @@ class RuleTemplate(Base):
     template_name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     rule_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    default_config: Mapped[dict | None] = mapped_column(JSON)
+    default_config: Mapped[dict | None] = mapped_column(JSONVariant)
     target_domains: Mapped[str | None] = mapped_column(Text)
     target_industries: Mapped[str | None] = mapped_column(Text)
     tags: Mapped[str | None] = mapped_column(Text)
@@ -888,4 +877,15 @@ class MaskingPolicy(Base):
     applies_to_roles: Mapped[str | None] = mapped_column(Text)
     unmasked_roles: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class SavedSearch(Base):
+    __tablename__ = "saved_searches"
+
+    search_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    user_email: Mapped[str] = mapped_column(String(200), nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    query: Mapped[str | None] = mapped_column(String(500))
+    filters: Mapped[dict | None] = mapped_column(JSONVariant)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
