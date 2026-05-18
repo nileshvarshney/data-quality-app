@@ -27,6 +27,7 @@ jobs:
         run: npm run build
         env:
           NODE_ENV: production
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
 
       - name: Deploy to Cloudflare Pages
         run: npx wrangler@4 pages deploy frontend/out --project-name dq-platform --branch main

@@ -64,7 +64,7 @@ class Settings(BaseSettings):
 
     # Security / Auth
     auth_required: bool = True
-    allowed_origins: str = "http://localhost:3000,http://localhost:3001"
+    allowed_origins: str = "http://localhost:3000,http://localhost:3001,https://dq-platform.pages.dev"
     rate_limit_per_minute: int = 120
 
     # OAuth2 / SSO
