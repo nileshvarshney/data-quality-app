@@ -476,41 +476,21 @@ export default function Sidebar() {
       </nav>
 
       {/* ── Footer ── */}
-      <div className="shrink-0 px-2 pb-3 pt-2 space-y-1" style={{ borderTop: '1px solid var(--sidebar-border)' }}>
-
-        {/* Theme toggle */}
-        <button
-          onClick={toggle}
-          title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
-          className={clsx(
-            'w-full flex items-center gap-2 rounded-lg transition-colors text-[12px] font-medium',
-            compact ? 'justify-center p-2.5' : 'px-3 py-2',
-            '[color:var(--sidebar-muted)] hover:[background-color:var(--sidebar-hover)] hover:[color:var(--sidebar-text)]'
-          )}
-        >
-          {theme === 'light'
-            ? <Moon  size={14} className="text-indigo-400 shrink-0" />
-            : <Sun   size={14} className="text-yellow-400 shrink-0" />}
-          {!compact && (
-            <>
-              <span className="flex-1 text-left">{theme === 'light' ? 'Dark Mode' : 'Light Mode'}</span>
-              <span className="text-[10px] opacity-40">{theme === 'light' ? 'Off' : 'On'}</span>
-            </>
-          )}
-        </button>
-
-        {/* User profile card */}
+      <div
+        className="shrink-0 px-2 pb-2.5 pt-2 space-y-1.5"
+        style={{ borderTop: '1px solid var(--sidebar-header-border)', background: 'var(--sidebar-footer-bg)' }}
+      >
+        {/* User profile card with actions */}
         {user && (
           <div className={clsx(
-            'rounded-xl p-2 transition-colors',
-            '[background-color:var(--sidebar-hover)]',
-            compact ? 'flex justify-center' : 'flex items-center gap-2.5'
+            'rounded-lg transition-colors border',
+            '[background-color:var(--sidebar-card-bg)] [border-color:var(--sidebar-card-border)]',
+            compact ? 'flex justify-center p-2' : 'flex items-center gap-2 p-1.5'
           )}>
             {/* Avatar */}
             <div className={clsx(
               `bg-gradient-to-br ${avatarGradient}`,
-              'rounded-lg flex items-center justify-center text-white font-bold shrink-0',
-              compact ? 'w-8 h-8 text-[11px]' : 'w-8 h-8 text-[11px]'
+              'rounded-[7px] flex items-center justify-center text-white font-bold shrink-0 w-7 h-7 text-[10px]'
             )}>
               {initials}
             </div>
@@ -518,38 +498,66 @@ export default function Sidebar() {
             {!compact && (
               <>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[12px] font-semibold truncate leading-tight"
+                  <p className="text-[11px] font-semibold truncate leading-tight"
                      style={{ color: 'var(--sidebar-text)' }}>
                     {user.full_name}
                   </p>
                   {roleConfig && (
                     <span className={clsx(
-                      'inline-block text-[9px] font-semibold px-1.5 py-0.5 rounded mt-0.5',
+                      'inline-block text-[9px] font-semibold px-1.5 py-0.5 rounded-[3px] mt-0.5',
                       roleConfig.color
                     )}>
                       {roleConfig.label}
                     </span>
                   )}
                 </div>
-                <button
-                  onClick={handleLogout}
-                  title="Sign out"
-                  className="shrink-0 p-1 rounded-lg transition-colors [color:var(--sidebar-subtle)] hover:text-red-500 hover:[background-color:var(--sidebar-active-bg)]"
-                >
-                  <LogOut size={13} />
-                </button>
+
+                {/* Theme toggle + logout grouped */}
+                <div className="flex items-center gap-0.5 shrink-0">
+                  <button
+                    onClick={toggle}
+                    title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+                    className="w-6 h-6 flex items-center justify-center rounded-md transition-colors [color:var(--sidebar-subtle)] hover:[background-color:var(--sidebar-hover)] hover:[color:var(--sidebar-text)]"
+                  >
+                    {theme === 'light'
+                      ? <Moon size={13} className="text-indigo-400" />
+                      : <Sun  size={13} className="text-yellow-400" />}
+                  </button>
+                  <button
+                    onClick={handleLogout}
+                    title="Sign out"
+                    className="w-6 h-6 flex items-center justify-center rounded-md transition-colors [color:var(--sidebar-subtle)] hover:text-red-500 hover:[background-color:var(--sidebar-hover)]"
+                  >
+                    <LogOut size={13} />
+                  </button>
+                </div>
               </>
             )}
           </div>
         )}
 
-        {/* Version / build info */}
+        {/* Compact: standalone theme toggle */}
+        {compact && (
+          <button
+            onClick={toggle}
+            title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+            className="w-full flex justify-center p-2 rounded-lg transition-colors [color:var(--sidebar-subtle)] hover:[background-color:var(--sidebar-hover)] hover:[color:var(--sidebar-text)]"
+          >
+            {theme === 'light'
+              ? <Moon size={14} className="text-indigo-400" />
+              : <Sun  size={14} className="text-yellow-400" />}
+          </button>
+        )}
+
+        {/* Version line — very muted */}
         {!compact && (
-          <p className="text-[9px] px-1 pt-0.5 flex items-center gap-1.5"
-             style={{ color: 'var(--sidebar-subtle)' }}>
-            <Zap size={9} className="text-blue-400" />
+          <p
+            className="text-[8.5px] px-1 flex items-center gap-1.5"
+            style={{ color: 'var(--sidebar-subtle)', opacity: 0.55 }}
+          >
+            <Zap size={8} />
             DataGuardian v0.1
-            <span className="ml-auto opacity-50">Decision Minds © 2026</span>
+            <span className="ml-auto">Decision Minds © 2026</span>
           </p>
         )}
       </div>
