@@ -1,7 +1,16 @@
 # SPA fallback: serve pre-built shell for dynamic routes.
 # Next.js client-side router reads the real browser URL, so useParams()
 # returns the actual ID even though Cloudflare serves the placeholder HTML.
+#
+# Static sub-pages must be listed BEFORE their wildcard catch-all, because
+# Cloudflare Pages evaluates _redirects before serving directory index files.
+/rules/                           /rules/index.html                              200
+/rules/approval-queue             /rules/approval-queue/index.html               200
+/rules/approval-queue/            /rules/approval-queue/index.html               200
+/rules/create                     /rules/create/index.html                       200
+/rules/create/                    /rules/create/index.html                       200
 /rules/*                          /rules/__placeholder__/                        200
+/dashboard/domains/               /dashboard/domains/index.html                  200
 /dashboard/domains/*              /dashboard/domains/__placeholder__/            200
 /dashboard/subdomains/*           /dashboard/subdomains/__placeholder__/        200
 /dashboard/tables/*               /dashboard/tables/__placeholder__/             200
