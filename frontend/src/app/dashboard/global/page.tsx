@@ -18,6 +18,7 @@ import QualityTrendChart from '@/components/charts/QualityTrendChart'
 import ScoreRing from '@/components/common/ScoreRing'
 import SeverityBadge from '@/components/common/SeverityBadge'
 import MetricInfo, { METRICS } from '@/components/common/MetricInfo'
+import { useTimezone } from '@/contexts/TimezoneContext'
 import { useTheme } from '@/components/layout/ThemeProvider'
 import clsx from 'clsx'
 
@@ -271,6 +272,7 @@ function HealthCard({ icon: Icon, iconBg, label, value, sub, highlight, metricKe
 
 export default function GlobalDashboardPage() {
   const { theme }   = useTheme()
+  const { formatTime } = useTimezone()
   const trackColor  = theme === 'dark' ? '#334155' : '#e2e8f0'
 
   const [global,         setGlobal]         = useState<GlobalDashboard | null>(null)
@@ -419,7 +421,7 @@ export default function GlobalDashboardPage() {
     { name: 'Passed', value: global?.rules_passed_today ?? 0 },
     { name: 'Failed', value: global?.rules_failed_today ?? 0 },
   ]
-  const refreshedAt = lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const refreshedAt = formatTime(lastRefreshed)
 
   // ── Loading skeleton ──────────────────────────────────────────────
   if (loading) return (

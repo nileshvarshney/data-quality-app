@@ -324,7 +324,7 @@ function Pagination({ page, pageSize, total, onChange, onSizeChange }: {
 const SEL = 'text-xs px-3 py-2 border border-gray-200 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-colors'
 
 export default function AuditPage() {
-  const { formatTs, abbr } = useTimezone()
+  const { formatTs, abbr, formatTime } = useTimezone()
   const [logs,     setLogs]     = useState<AuditLog[]>([])
   const [summary,  setSummary]  = useState<{ action: string; count: number }[]>([])
   const [loading,  setLoading]  = useState(true)
@@ -411,7 +411,7 @@ export default function AuditPage() {
   const deletes = countFor('DELETE') + countFor('DEACTIVATE')
   const approvals = countFor('APPROVE') + countFor('REJECT') + countFor('CERTIFY')
 
-  const refreshAt = lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const refreshAt = formatTime(lastRefreshed)
 
   return (
     <div className="p-6 space-y-5 max-w-[1600px]">

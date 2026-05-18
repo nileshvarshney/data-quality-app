@@ -604,7 +604,7 @@ const DATE_INPUT = 'text-xs px-3 py-2 border border-gray-200 rounded-lg bg-white
 
 export default function RunsPage() {
   const searchParams = useSearchParams()
-  const { formatTs, abbr } = useTimezone()
+  const { formatTs, abbr, formatTime } = useTimezone()
 
   const [runs,       setRuns]       = useState<EnrichedRun[]>([])
   const [domains,    setDomains]    = useState<any[]>([])
@@ -726,7 +726,7 @@ export default function RunsPage() {
     applyPreset(3, '3d')
   }
 
-  const refreshAt = lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const refreshAt = formatTime(lastRefreshed)
 
   return (
     <div className="p-6 space-y-5 max-w-[1600px]">

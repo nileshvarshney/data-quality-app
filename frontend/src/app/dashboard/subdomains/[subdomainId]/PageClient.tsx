@@ -12,6 +12,7 @@ import ScoreRing from '@/components/common/ScoreRing'
 import SeverityBadge from '@/components/common/SeverityBadge'
 import Breadcrumbs from '@/components/common/Breadcrumbs'
 import { useTheme } from '@/components/layout/ThemeProvider'
+import { useTimezone } from '@/contexts/TimezoneContext'
 
 function scoreTextColor(s: number) {
   if (s >= 95) return 'text-green-600'; if (s >= 80) return 'text-yellow-600'
@@ -164,6 +165,7 @@ export default function SubdomainDetailPage() {
     ? _subdomainId
     : pathname.split('/').filter(Boolean).pop() ?? ''
   const { theme } = useTheme()
+  const { formatTime } = useTimezone()
   const trackColor = theme === 'dark' ? '#334155' : '#e2e8f0'
 
   const [data, setData]             = useState<any>(null)
@@ -197,7 +199,7 @@ export default function SubdomainDetailPage() {
   const score    = data.quality_score ?? 0
   const passTotal = (data.passed_rules ?? 0) + (data.failed_rules ?? 0)
   const passRate  = passTotal > 0 ? (data.passed_rules / passTotal) * 100 : 0
-  const refreshedAt = lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const refreshedAt = formatTime(lastRefreshed)
 
   return (
     <div className="p-6 space-y-6 max-w-[1600px]">

@@ -1,6 +1,6 @@
 'use client'
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
-import { formatTs as _formatTs, tzAbbr } from '@/utils/dateFormat'
+import { formatTs as _formatTs, formatTime as _formatTime, tzAbbr } from '@/utils/dateFormat'
 
 const STORAGE_KEY = 'dq-display-timezone'
 const DEFAULT_TZ = 'America/Los_Angeles'
@@ -9,6 +9,7 @@ interface TimezoneContextValue {
   timezone: string
   abbr: string
   formatTs: (iso: string | null | undefined, opts?: { dateOnly?: boolean; withSeconds?: boolean; yearAlways?: boolean }) => string
+  formatTime: (date: Date) => string
   setTimezone: (tz: string) => void
 }
 
@@ -16,6 +17,7 @@ const TimezoneContext = createContext<TimezoneContextValue>({
   timezone: DEFAULT_TZ,
   abbr: 'PST',
   formatTs: (iso) => _formatTs(iso, DEFAULT_TZ),
+  formatTime: (date) => _formatTime(date, DEFAULT_TZ),
   setTimezone: () => {},
 })
 
@@ -49,6 +51,7 @@ export function TimezoneProvider({ children }: { children: ReactNode }) {
     timezone,
     abbr: tzAbbr(timezone),
     formatTs: (iso, opts) => _formatTs(iso, timezone, opts),
+    formatTime: (date) => _formatTime(date, timezone),
     setTimezone,
   }
 

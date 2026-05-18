@@ -16,6 +16,7 @@ import SeverityBadge from '@/components/common/SeverityBadge'
 import Breadcrumbs from '@/components/common/Breadcrumbs'
 import MetricInfo, { METRICS } from '@/components/common/MetricInfo'
 import { useTheme } from '@/components/layout/ThemeProvider'
+import { useTimezone } from '@/contexts/TimezoneContext'
 
 // ── Helpers ───────────────────────────────────────────────────────
 
@@ -96,6 +97,7 @@ export default function DomainDetailPage() {
     ? _domainId
     : pathname.split('/').filter(Boolean).pop() ?? ''
   const { theme }    = useTheme()
+  const { formatTime } = useTimezone()
   const trackColor   = theme === 'dark' ? '#334155' : '#e2e8f0'
 
   const [data, setData]                 = useState<any>(null)
@@ -152,7 +154,7 @@ export default function DomainDetailPage() {
     { name: 'Passed', value: data.passed_rules ?? 0 },
     { name: 'Failed', value: data.failed_rules ?? 0 },
   ]
-  const refreshedAt = lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const refreshedAt = formatTime(lastRefreshed)
 
   return (
     <div className="p-6 space-y-6 max-w-[1600px]">

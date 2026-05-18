@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
+import { useTimezone } from '@/contexts/TimezoneContext'
 import { rulesApi, domainsApi } from '@/services/apiClient'
 import SeverityBadge from '@/components/common/SeverityBadge'
 import {
@@ -166,6 +167,7 @@ function RejectModal({ rule, onClose, onConfirm }: RejectModalProps) {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function ApprovalQueuePage() {
+  const { formatTs } = useTimezone()
   const [rules, setRules] = useState<PendingRule[]>([])
   const [domains, setDomains] = useState<Domain[]>([])
   const [loading, setLoading] = useState(true)
@@ -399,7 +401,7 @@ export default function ApprovalQueuePage() {
 
                     {/* Submitted date */}
                     <td className="px-4 py-3 text-sm text-gray-700">
-                      <span className="text-xs text-gray-500" title={new Date(rule.updated_at).toLocaleString()}>
+                      <span className="text-xs text-gray-500" title={formatTs(rule.updated_at, { yearAlways: true, withSeconds: true })}>
                         {timeAgo(rule.updated_at)}
                       </span>
                     </td>

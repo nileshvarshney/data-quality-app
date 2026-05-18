@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
+import { useTimezone } from '@/contexts/TimezoneContext'
 import { dataProductsApi, domainsApi, assetsApi } from '@/services/apiClient'
 import {
   Package, Plus, Star, Globe, Loader2, X, Pencil, Trash2,
@@ -251,6 +252,7 @@ function ProductDetail({
   onEdit: (p: DataProduct) => void
   onDeleted: () => void
 }) {
+  const { formatTs } = useTimezone()
   const [product, setProduct]         = useState<DataProduct | null>(null)
   const [loading, setLoading]         = useState(true)
   const [quality, setQuality]         = useState<Record<string, unknown> | null>(null)
@@ -436,7 +438,7 @@ function ProductDetail({
                         const linkedAsset = product?.assets?.find(a => a.asset_id === s.asset_id)
                         const tableName = linkedAsset?.sf_table_name ?? s.asset_id.slice(0, 8)
                         const lastRun = s.last_run
-                          ? new Date(s.last_run).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                          ? formatTs(s.last_run)
                           : null
                         return (
                           <div key={s.asset_id} className="flex items-center gap-2">

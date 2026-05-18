@@ -191,7 +191,7 @@ export default function TableDashboardPage() {
     ? _assetId
     : pathname.split('/').filter(Boolean).pop() ?? ''
   const { theme }   = useTheme()
-  const { formatTs } = useTimezone()
+  const { formatTs, formatTime } = useTimezone()
   const trackColor  = theme === 'dark' ? '#334155' : '#e2e8f0'
 
   const [data,      setData]      = useState<any>(null)
@@ -338,7 +338,7 @@ export default function TableDashboardPage() {
   const passTotal = (data.passed_rules ?? 0) + (data.failed_rules ?? 0) + (data.warning_rules ?? 0)
   const passRate  = passTotal > 0 ? (data.passed_rules / passTotal) * 100 : 0
   const failedRules = (data.rules || []).filter((r: any) => r.status === 'failed' || r.status === 'error')
-  const refreshedAt = lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const refreshedAt = formatTime(lastRefreshed)
 
   return (
     <div className="p-6 space-y-6 max-w-[1600px]">

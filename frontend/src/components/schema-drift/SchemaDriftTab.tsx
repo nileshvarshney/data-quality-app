@@ -1,16 +1,13 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { CheckCircle, AlertTriangle, Loader2, ChevronDown, ChevronRight } from 'lucide-react'
+import { useTimezone } from '@/contexts/TimezoneContext'
 import { schemaDriftApi } from '@/services/schemaDriftApi'
 import type { SchemaDriftResponse, SchemaDriftEvent } from '@/types/schemaDrift'
 import { DriftEventRow } from './DriftEventRow'
 
-function formatDate(iso: string | null | undefined): string {
-  if (!iso) return 'unknown date'
-  return new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
-}
-
 export function SchemaDriftTab({ assetId }: { assetId: string }) {
+  const { formatTs } = useTimezone()
   const [data, setData]           = useState<SchemaDriftResponse | null>(null)
   const [history, setHistory]     = useState<SchemaDriftEvent[]>([])
   const [loading, setLoading]     = useState(true)
@@ -67,8 +64,8 @@ export function SchemaDriftTab({ assetId }: { assetId: string }) {
 
   const { baseline, open_events } = data
   const approvedLabel = baseline.approved_by
-    ? `approved by ${baseline.approved_by} on ${formatDate(baseline.approved_at ?? baseline.created_at)}`
-    : `initialized on ${formatDate(baseline.created_at)}`
+    ? `approved by ${baseline.approved_by} on ${formatTs(baseline.approved_at ?? baseline.created_at, { dateOnly: true })}`
+    : `initialized on ${formatTs(baseline.created_at, { dateOnly: true })}`
 
   return (
     <div className="space-y-4">
@@ -136,8 +133,8 @@ export function SchemaDriftTab({ assetId }: { assetId: string }) {
                   </span>
                   <span className="text-gray-400 text-xs">
                     {ev.status === 'accepted'
-                      ? `accepted${ev.resolved_by ? ` by ${ev.resolved_by}` : ''} · ${formatDate(ev.resolved_at)}`
-                      : `detected ${formatDate(ev.detected_at)}`}
+                      ? `accepted${ev.resolved_by ? ` by ${ev.resolved_by}` : ''} · ${formatTs(ev.resolved_at, { dateOnly: true })}`
+                      : `detected ${formatTs(ev.detected_at, { dateOnly: true })}`}
                   </span>
                 </div>
               ))}

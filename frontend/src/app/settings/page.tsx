@@ -1148,6 +1148,7 @@ interface NightlyJobPanelProps {
 }
 
 function NightlyJobPanel({ jobId, title, description, defaultHour, defaultMinute, onConfigure, onRunNow }: NightlyJobPanelProps) {
+  const { formatTs } = useTimezone()
   const [enabled, setEnabled] = useState(true)
   const [hour, setHour] = useState(defaultHour)
   const [minute, setMinute] = useState(defaultMinute)
@@ -1234,7 +1235,7 @@ function NightlyJobPanel({ jobId, title, description, defaultHour, defaultMinute
         <div className="text-xs text-gray-500 dark:text-[var(--text-3)]">
           <span className="font-medium text-gray-700 dark:text-[var(--text-2)]">Next run: </span>
           {nextRun
-            ? new Date(nextRun).toLocaleString(undefined, {dateStyle:'medium', timeStyle:'short'})
+            ? formatTs(nextRun)
             : enabled ? 'Calculating…' : 'Disabled'}
         </div>
         {msg && (
@@ -1260,6 +1261,7 @@ function NightlyJobPanel({ jobId, title, description, defaultHour, defaultMinute
 // ── Column Profiling Job Panel ────────────────────────────────────────────────
 
 function ColumnProfilingJobPanel() {
+  const { formatTs } = useTimezone()
   const [enabled, setEnabled] = useState(true)
   const [hour, setHour] = useState(2)
   const [minute, setMinute] = useState(0)
@@ -1353,7 +1355,7 @@ function ColumnProfilingJobPanel() {
           <div>
             <span className="font-medium text-gray-700 dark:text-[var(--text-2)]">Next run: </span>
             {nextRun
-              ? new Date(nextRun).toLocaleString(undefined, {dateStyle:'medium', timeStyle:'short'})
+              ? formatTs(nextRun)
               : enabled ? 'Calculating…' : 'Disabled'}
           </div>
           <div><span className="font-medium text-gray-700 dark:text-[var(--text-2)]">Also runs: </span>Automatically when a new table is registered</div>

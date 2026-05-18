@@ -27,6 +27,15 @@ export function formatTs(
   }).format(d)
 }
 
+/** Format a live Date object (e.g. page refresh time) in the configured timezone. */
+export function formatTime(date: Date, timezone: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date)
+}
+
 export function tzAbbr(timezone: string): string {
   try {
     const parts = new Intl.DateTimeFormat('en-US', {
