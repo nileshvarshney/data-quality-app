@@ -161,15 +161,19 @@ async def _resolve_executor(asset: DataAsset, db: AsyncSession, database: str | 
             )
 
     if not conn_record:
-        # Final fallback: env-var-based global client (uses connection pool internally)
-        from app.core.config import settings as _settings
-        if not _settings.snowflake_account:
-            raise RuntimeError(
-                "No Snowflake connection configured. "
-                "Add a connection in Settings → Snowflake, then re-register your table using Browse Snowflake."
-            )
-        from app.db.snowflake_client import snowflake_client
-        return snowflake_client
+        # Fallback: look for the designated primary target connection
+        primary_res = await db.execute(
+            select(SnowflakeConnection).where(SnowflakeConnection.is_primary_target == True)
+        )
+        conn_record = primary_res.scalar_one_or_none()
+        if conn_record:
+            logger.debug(f"Using primary target connection '{conn_record.connection_name}'")
+
+    if not conn_record:
+        raise RuntimeError(
+            "No Snowflake target connection configured. "
+            "Go to Settings → Target Database and add a connection."
+        )
 
     if not conn_record.password:
         raise RuntimeError(

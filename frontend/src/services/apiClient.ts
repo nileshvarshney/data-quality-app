@@ -100,11 +100,14 @@ export const connectionsApi = {
   update: (id: string, data: object) => api.put(`/connections/${id}`, data),
   delete: (id: string) => api.delete(`/connections/${id}`),
   test: (id: string) => api.post(`/connections/${id}/test`),
+  testCredentials: (data: object) => api.post('/connections/test-credentials', data),
   databases: (id: string) => api.get(`/connections/${id}/databases`),
   schemas: (id: string, database: string) => api.get(`/connections/${id}/schemas`, { params: { database } }),
   tables: (id: string, database: string, schema: string) => api.get(`/connections/${id}/tables`, { params: { database, schema } }),
   columns: (id: string, database: string, schema: string, table: string) =>
     api.get(`/connections/${id}/columns`, { params: { database, schema, table } }),
+  getPrimaryTarget: () => api.get('/connections/primary-target'),
+  setPrimaryTarget: (id: string) => api.put(`/connections/${id}/set-primary-target`),
 }
 
 // Rules
@@ -253,7 +256,7 @@ export const configApi = {
   updateKey: (key: string, value: string) => api.put(`/config/${key}`, { value }),
   bulkUpdate: (updates: Record<string, string>) => api.post('/config/bulk-update', { updates }),
   testDatabase: () => api.post('/config/test/database'),
-  testSnowflake: () => api.post('/config/test/snowflake'),
+  testPlatformConnection: (creds?: { account?: string; user?: string; password?: string; warehouse?: string; role?: string }) => api.post('/config/test/platform-connection', creds ?? {}),
   testLlm: () => api.post('/config/test/llm'),
   testNotification: (channel: string) => api.post(`/config/test/notification/${channel}`),
   testVault: () => api.post('/config/test/vault'),

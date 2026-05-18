@@ -290,7 +290,7 @@ async def seed(db: AsyncSession):
 
 
 async def main():
-    await create_tables()
+    await asyncio.to_thread(create_tables)
     async with AsyncSessionLocal() as db:
         await seed(db)
 

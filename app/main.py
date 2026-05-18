@@ -11,7 +11,7 @@ from app.core.config import settings
 from app.core.limiter import limiter
 from app.core.logging_config import setup_logging
 from app.core.middleware import RequestIDMiddleware, SecurityHeadersMiddleware
-from app.db.database import create_tables
+from app.db.database import create_tables, check_db_health
 from app.services.scheduler_service import start_scheduler, stop_scheduler
 from app.api import (
     domains, subdomains, assets, rules, schedules, executions,
@@ -76,7 +76,7 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Data Quality Platform...")
 
     async def _init_db():
-        await create_tables()
+        await asyncio.to_thread(create_tables)
         from app.db.database import AsyncSessionLocal
         from app.services.config_service import seed_config
         async with AsyncSessionLocal() as db:
@@ -87,9 +87,9 @@ async def lifespan(app: FastAPI):
             await load_all_schedules(db)
 
     try:
-        await asyncio.wait_for(_init_db(), timeout=20)
+        await asyncio.wait_for(_init_db(), timeout=120)
     except asyncio.TimeoutError:
-        logger.error("Database connection timed out (>20s) during startup — server starting without DB")
+        logger.error("Database connection timed out (>120s) during startup — server starting without DB")
         start_scheduler()
     except Exception as e:
         logger.error(f"Startup initialization failed (DB may be unavailable): {e}")
@@ -198,18 +198,8 @@ app.include_router(admin.router)
 
 @app.get("/health", tags=["Health"])
 async def health():
-    """Deep health check — verifies DB connectivity."""
-    from app.db.database import engine
-    from sqlalchemy import text
-    db_ok = False
-    db_error = None
-    try:
-        async with engine.connect() as conn:
-            await conn.execute(text("SELECT 1"))
-        db_ok = True
-    except Exception as e:
-        db_error = str(e)
-
+    """Deep health check — verifies Snowflake DB connectivity."""
+    db_ok, db_error = await check_db_health()
     status_str = "healthy" if db_ok else "degraded"
     return {
         "status": status_str,

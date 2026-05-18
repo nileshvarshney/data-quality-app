@@ -2,11 +2,18 @@ import pytest
 from httpx import AsyncClient, ASGITransport
 from unittest.mock import AsyncMock, MagicMock
 
+_MOCK_USER = {"email": "admin@example.com", "role": "admin", "user_id": "system", "full_name": "System Admin"}
+
+
+async def _mock_current_user():
+    return _MOCK_USER
+
 
 @pytest.mark.asyncio
 async def test_get_schema_drift_asset_not_found():
     from app.main import app
     from app.db.database import get_db
+    from app.core.security import get_current_user
 
     async def mock_db():
         db = AsyncMock()
@@ -16,18 +23,21 @@ async def test_get_schema_drift_asset_not_found():
         yield db
 
     app.dependency_overrides[get_db] = mock_db
+    app.dependency_overrides[get_current_user] = _mock_current_user
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.get("/api/v1/assets/nonexistent/schema-drift")
         assert resp.status_code == 404
     finally:
         app.dependency_overrides.pop(get_db, None)
+        app.dependency_overrides.pop(get_current_user, None)
 
 
 @pytest.mark.asyncio
 async def test_get_schema_drift_no_baseline():
     from app.main import app
     from app.db.database import get_db
+    from app.core.security import get_current_user
     from unittest.mock import MagicMock
 
     asset = MagicMock()
@@ -52,6 +62,7 @@ async def test_get_schema_drift_no_baseline():
         yield db
 
     app.dependency_overrides[get_db] = mock_db
+    app.dependency_overrides[get_current_user] = _mock_current_user
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.get("/api/v1/assets/asset-1/schema-drift")
@@ -61,12 +72,14 @@ async def test_get_schema_drift_no_baseline():
         assert data["open_events"] == []
     finally:
         app.dependency_overrides.pop(get_db, None)
+        app.dependency_overrides.pop(get_current_user, None)
 
 
 @pytest.mark.asyncio
 async def test_get_schema_drift_with_open_events():
     from app.main import app
     from app.db.database import get_db
+    from app.core.security import get_current_user
     from unittest.mock import MagicMock
     from datetime import datetime
 
@@ -116,6 +129,7 @@ async def test_get_schema_drift_with_open_events():
         yield db
 
     app.dependency_overrides[get_db] = mock_db
+    app.dependency_overrides[get_current_user] = _mock_current_user
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.get("/api/v1/assets/asset-1/schema-drift")
@@ -126,12 +140,14 @@ async def test_get_schema_drift_with_open_events():
         assert data["open_events"][0]["change_type"] == "column_added"
     finally:
         app.dependency_overrides.pop(get_db, None)
+        app.dependency_overrides.pop(get_current_user, None)
 
 
 @pytest.mark.asyncio
 async def test_approve_baseline_asset_not_found():
     from app.main import app
     from app.db.database import get_db
+    from app.core.security import get_current_user
 
     async def mock_db():
         db = AsyncMock()
@@ -141,9 +157,11 @@ async def test_approve_baseline_asset_not_found():
         yield db
 
     app.dependency_overrides[get_db] = mock_db
+    app.dependency_overrides[get_current_user] = _mock_current_user
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post("/api/v1/assets/nonexistent/schema-drift/approve")
         assert resp.status_code == 404
     finally:
         app.dependency_overrides.pop(get_db, None)
+        app.dependency_overrides.pop(get_current_user, None)

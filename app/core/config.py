@@ -1,5 +1,4 @@
 from pydantic_settings import BaseSettings
-from typing import Optional
 
 _WEAK_SECRET_KEYS = {
     "change-me-in-production-use-openssl-rand-hex-32",
@@ -15,19 +14,19 @@ class Settings(BaseSettings):
     app_name: str = "Data Quality & Governance"
     debug: bool = False
 
-    # Database
-    database_url: str = "postgresql+asyncpg://dquser:dqpass@localhost:5432/dqplatform"
-    sync_database_url: str = "postgresql://dquser:dqpass@localhost:5432/dqplatform"
+    # ── Platform Snowflake connection (app's own tables: DQ_PLATFORM_DB.DQ_APP) ──
+    # Set via env vars: SF_PLATFORM_ACCOUNT, SF_PLATFORM_USER, etc.
+    sf_platform_account: str = ""
+    sf_platform_user: str = ""
+    sf_platform_password: str = ""
+    sf_platform_warehouse: str = "DQ_EXECUTION_WH"
+    sf_platform_role: str = "DQ_PLATFORM_ROLE"
+    # Platform app database and schema (where platform tables live)
+    snowflake_app_database: str = "DQ_PLATFORM_DB"
+    snowflake_app_schema: str = "DQ_APP"
 
-    # Snowflake (for rule execution against source data)
-    snowflake_account: str = ""
-    snowflake_user: str = ""
-    snowflake_password: str = ""
-    snowflake_warehouse: str = "DQ_EXECUTION_WH"
+    # Warehouse used for column profiling (smaller WH, optional)
     snowflake_profile_warehouse: str = "DQ_SMALL_WH"
-    snowflake_database: str = ""
-    snowflake_schema: str = ""
-    snowflake_role: str = "DQ_PLATFORM_ROLE"
 
     # LLM
     llm_provider: str = "ollama"
@@ -48,8 +47,6 @@ class Settings(BaseSettings):
     secret_key: str = "change-me-in-production-use-openssl-rand-hex-32"
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
-    # Key for Fernet encryption of credentials stored in the DB.
-    # Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     encryption_key: str = ""
 
     # Alerts & Notifications
@@ -65,8 +62,7 @@ class Settings(BaseSettings):
     smtp_use_tls: bool = True
     alert_email_recipients: str = ""
 
-    # Security
-    # In production this MUST be True. Set AUTH_REQUIRED=false only for local dev.
+    # Security / Auth
     auth_required: bool = True
     allowed_origins: str = "http://localhost:3000,http://localhost:3001"
     rate_limit_per_minute: int = 120
@@ -74,21 +70,14 @@ class Settings(BaseSettings):
     # OAuth2 / SSO
     google_client_id: str = ""
     google_client_secret: str = ""
-    # Where Google redirects after consent (must match Google Cloud Console)
     oauth_redirect_uri: str = "http://localhost:8000/auth/oauth/google/callback"
-    # Where the backend redirects after issuing tokens (frontend callback page)
     frontend_url: str = "http://localhost:3000"
 
-    # ── Secrets backends (production) ────────────────────────────────────────
-    # HashiCorp Vault — Vault Agent sidecar injects secrets as env vars by
-    # default.  Set these only if you want the app itself to fetch from Vault.
-    vault_addr: str = ""           # e.g. https://vault.example.com
-    vault_token: str = ""          # or use VAULT_TOKEN env var directly
-    vault_secret_path: str = ""    # KV v2 path, e.g. secret/data/dq-platform
-
-    # AWS Secrets Manager — set to enable automatic secret resolution at startup.
-    # The app calls GetSecretValue and merges the JSON into settings.
-    aws_secrets_name: str = ""     # e.g. prod/dq-platform/secrets
+    # Secrets backends (production)
+    vault_addr: str = ""
+    vault_token: str = ""
+    vault_secret_path: str = ""
+    aws_secrets_name: str = ""
     aws_region: str = "us-east-1"
 
     # Performance
@@ -97,14 +86,12 @@ class Settings(BaseSettings):
     execution_timeout_seconds: int = 300
     execution_max_retries: int = 3
 
-    # Snowflake connection pool
+    # Snowflake connection pool (for target connections)
     snowflake_pool_min_size: int = 1
     snowflake_pool_max_size: int = 5
     snowflake_pool_acquire_timeout: float = 30.0
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    model_config = {"env_file": ".env", "case_sensitive": False}
 
     def is_weak_secret_key(self) -> bool:
         return self.secret_key.lower() in _WEAK_SECRET_KEYS or len(self.secret_key) < 32

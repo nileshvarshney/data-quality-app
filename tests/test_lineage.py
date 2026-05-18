@@ -50,7 +50,13 @@ def test_returns_uppercase():
 async def test_get_lineage_404():
     from app.main import app
     from app.db.database import get_db
+    from app.core.security import get_current_user
     from unittest.mock import AsyncMock
+
+    _mock_user = {"email": "admin@example.com", "role": "admin", "user_id": "system", "full_name": "System Admin"}
+
+    async def _mock_current_user():
+        return _mock_user
 
     async def mock_db():
         m = AsyncMock()
@@ -58,12 +64,14 @@ async def test_get_lineage_404():
         yield m
 
     app.dependency_overrides[get_db] = mock_db
+    app.dependency_overrides[get_current_user] = _mock_current_user
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get("/lineage/nonexistent-id-12345")
         assert response.status_code == 404
     finally:
         app.dependency_overrides.pop(get_db, None)
+        app.dependency_overrides.pop(get_current_user, None)
 
 
 @pytest.mark.asyncio

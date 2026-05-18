@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -5,11 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_db
 from app.services import config_service
 from app.core.security import get_current_user
+from app.core.config import settings
 
 logger = logging.getLogger("dq_platform.config")
 router = APIRouter(prefix="/config", tags=["Configuration"])
 
-VALID_CATEGORIES = {"general", "database", "snowflake", "llm", "scheduler"}
+VALID_CATEGORIES = {"general", "platform_connection", "llm", "scheduler"}
 
 
 @router.get("/public/display-timezone", include_in_schema=True)
@@ -17,6 +19,84 @@ async def get_display_timezone(db: AsyncSession = Depends(get_db)):
     """Return the configured display timezone — public endpoint, no auth required."""
     value = await config_service.get_value("display_timezone", db)
     return {"timezone": value or "America/Los_Angeles"}
+
+
+@router.get("/platform-info")
+async def get_platform_info(db: AsyncSession = Depends(get_db)):
+    """Return platform Snowflake connection config (from AppConfig, editable in UI)."""
+    keys = ["sf_platform_account", "sf_platform_user", "sf_platform_password",
+            "sf_platform_warehouse", "sf_platform_role",
+            "snowflake_app_database", "snowflake_app_schema"]
+    data: dict = {}
+    for k in keys:
+        val = await config_service.get_value(k, db)
+        if k == "sf_platform_password":
+            data["has_password"] = bool(val)
+        else:
+            data[k] = val or ""
+    return data
+
+
+class PlatformConnectionTest(BaseModel):
+    account: str = ""
+    user: str = ""
+    password: str = ""
+    warehouse: str = ""
+    role: str = ""
+
+
+@router.post("/test/platform-connection")
+async def test_platform_connection(payload: PlatformConnectionTest = PlatformConnectionTest()):
+    """Test the platform Snowflake connection.
+
+    Accepts credentials in the request body. Falls back to DB-stored values,
+    then to env vars — so this works even before the DB is reachable.
+    """
+    body = payload
+
+    # Resolve each credential: body → DB → settings
+    async def resolve(key: str, body_val: str, settings_val: str) -> str:
+        if body_val:
+            return body_val
+        try:
+            from app.db.database import get_session_ctx
+            async with get_session_ctx() as session:
+                db_val = await config_service.get_value(key, session)
+                if db_val:
+                    return db_val
+        except Exception:
+            pass
+        return settings_val or ""
+
+    account  = await resolve("sf_platform_account",   body.account,   settings.sf_platform_account)
+    user     = await resolve("sf_platform_user",      body.user,      settings.sf_platform_user)
+    password = await resolve("sf_platform_password",  body.password,  settings.sf_platform_password)
+    warehouse= await resolve("sf_platform_warehouse", body.warehouse, settings.sf_platform_warehouse)
+    role     = await resolve("sf_platform_role",      body.role,      settings.sf_platform_role)
+
+    if not account or not user or not password:
+        return {"status": "error", "message": "Account, user, and password are required"}
+
+    try:
+        import snowflake.connector
+        kwargs = dict(account=account, user=user, password=password,
+                      warehouse=warehouse or "COMPUTE_WH")
+        if role:
+            kwargs["role"] = role
+        conn = await asyncio.to_thread(snowflake.connector.connect, **kwargs)
+        cur = conn.cursor()
+        await asyncio.to_thread(cur.execute, "SELECT CURRENT_VERSION(), CURRENT_ROLE(), CURRENT_WAREHOUSE()")
+        row = await asyncio.to_thread(cur.fetchone)
+        cur.close()
+        conn.close()
+        return {
+            "status": "ok",
+            "message": f"Connected successfully (Snowflake {row[0]})",
+            "role": row[1],
+            "warehouse": row[2],
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 
 class ConfigUpdate(BaseModel):
@@ -92,33 +172,7 @@ async def test_database(db: AsyncSession = Depends(get_db)):
     try:
         from sqlalchemy import text
         await db.execute(text("SELECT 1"))
-        return {"status": "ok", "message": "PostgreSQL connection successful"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-
-@router.post("/test/snowflake")
-async def test_snowflake(db: AsyncSession = Depends(get_db)):
-    account = await config_service.get_value("snowflake_account", db)
-    user = await config_service.get_value("snowflake_user", db)
-    password = await config_service.get_value("snowflake_password", db)
-    warehouse = await config_service.get_value("snowflake_warehouse", db)
-
-    if not account or not user or not password:
-        return {"status": "error", "message": "Snowflake account, user, and password are required"}
-
-    try:
-        import snowflake.connector
-        conn = snowflake.connector.connect(
-            account=account, user=user, password=password,
-            warehouse=warehouse or "DQ_EXECUTION_WH",
-        )
-        cursor = conn.cursor()
-        cursor.execute("SELECT CURRENT_VERSION()")
-        version = cursor.fetchone()[0]
-        cursor.close()
-        conn.close()
-        return {"status": "ok", "message": f"Snowflake connection successful (version {version})"}
+        return {"status": "ok", "message": "Platform Snowflake connection successful"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 

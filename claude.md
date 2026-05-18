@@ -1,12 +1,12 @@
 # CLAUDE.md
 
-Enterprise Snowflake Data Quality & Governance platform. Backend: FastAPI + SQLAlchemy (async, PostgreSQL). Frontend: Next.js 15 + TypeScript + Tailwind.
+Enterprise Snowflake Data Quality & Governance platform. Backend: FastAPI + SQLAlchemy (snowflake-sqlalchemy). Frontend: Next.js 15 + TypeScript + Tailwind.
 
 ## Development Commands
 
 ### Full Stack (Docker)
 ```bash
-docker compose up                         # postgres + api + frontend
+docker compose up                         # api + frontend (Snowflake as backend DB)
 docker compose --profile ollama up        # include local Ollama
 docker compose up --build                 # rebuild after dep changes
 ```
@@ -30,25 +30,22 @@ npm run type-check # tsc --noEmit
 npm run lint
 ```
 
-### Database
-```bash
-alembic upgrade head
-alembic revision --autogenerate -m "description"
-```
-
 ### Key `.env` Variables
+See `.env.example` for the full list. Minimum to run locally:
 ```
-DATABASE_URL=postgresql+asyncpg://dquser:dqpass@localhost:5432/dqplatform
-SYNC_DATABASE_URL=postgresql://dquser:dqpass@localhost:5432/dqplatform
+SF_PLATFORM_ACCOUNT=myorg-myaccount
+SF_PLATFORM_USER=dq_platform_user
+SF_PLATFORM_PASSWORD=your_password
+SNOWFLAKE_APP_DATABASE=DQ_PLATFORM_DB
+SNOWFLAKE_APP_SCHEMA=DQ_APP
 AUTH_REQUIRED=false    # disable auth for local dev
-LLM_PROVIDER=openai    # ollama | openai | claude | gemini_flash
-OPENAI_API_KEY=...
+LLM_PROVIDER=ollama    # ollama | openai | claude | gemini_flash
 SECRET_KEY=<openssl rand -hex 32>
 ```
 
 ## Architecture
 
-**Request flow:** `Browser → Next.js page → services/apiClient.ts → FastAPI router → service layer → SQLAlchemy (PostgreSQL) or SnowflakePool`
+**Request flow:** `Browser → Next.js page → services/apiClient.ts → FastAPI router → service layer → Snowflake (via SQLAlchemy + snowflake-sqlalchemy)`
 
 `apiClient.ts` attaches JWT from `localStorage`, retries on 401 with refresh token.
 
@@ -62,7 +59,7 @@ SECRET_KEY=<openssl rand -hex 32>
 | Config | `app/core/config.py` | Pydantic `Settings`, reads `.env` |
 | Security | `app/core/security.py` | JWT, RBAC helpers, API key auth |
 
-**DB init** — `app/db/database.py:create_tables()` uses `Base.metadata.create_all()` + idempotent `ALTER TABLE … ADD COLUMN IF NOT EXISTS` (no Alembic for column additions; Alembic only for new tables).
+**DB init** — `app/db/database.py:create_tables()` runs at startup via `asyncio.to_thread`. Creates the Snowflake database/schema if missing, then creates each table individually (sorted by FK order), catching "already exists" errors. Column additions use `ALTER TABLE … ADD COLUMN` statements wrapped in try/except. No Alembic — schema changes go directly into `create_tables()`.
 
 **Scheduler** — APScheduler in `lifespan()`. Nightly: `evaluate_policies()` at 00:15, catalog index refresh. Schedule inheritance: rule > table > subdomain > domain > global.
 

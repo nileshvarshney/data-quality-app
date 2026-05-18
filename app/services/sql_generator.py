@@ -154,7 +154,7 @@ class SQLGenerator:
         return (
             f'SELECT COUNT(*) AS failed_count FROM ('
             f'SELECT {cols_quoted}, COUNT(*) AS cnt FROM {table_ref} '
-            f'GROUP BY {cols_quoted} HAVING COUNT(*) > 1)'
+            f'GROUP BY {cols_quoted} HAVING COUNT(*) > 1) AS _dups'
         )
 
     def _duplicate_check(self, config: dict, table_ref: str, column: str | None) -> str:
