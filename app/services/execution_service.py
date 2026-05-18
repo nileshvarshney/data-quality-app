@@ -186,6 +186,44 @@ async def _resolve_executor(asset: DataAsset, db: AsyncSession, database: str | 
 
 # ── Rule execution ─────────────────────────────────────────────────────────────
 
+async def _llm_semantic_validate(
+    rule: "DQRule",
+    sample_rows: list[dict],
+    db: "AsyncSession",
+) -> int:
+    """Call LLM to count how many sampled rows fail an llm_semantic_check rule."""
+    if not sample_rows:
+        return 0
+    config = rule.rule_config or {}
+    validation_prompt = config.get(
+        "validation_prompt",
+        f"Check if each row violates: {rule.rule_description or rule.rule_name}"
+    )
+    rows_text = "\n".join(str(r) for r in sample_rows[:20])
+    prompt = (
+        f"Validation rule: {validation_prompt}\n\n"
+        f"Rows to check ({len(sample_rows)} rows):\n{rows_text}\n\n"
+        f"Return ONLY a JSON object: {{\"failed_count\": <integer>, \"reason\": \"<brief explanation>\"}}"
+    )
+    sys_semantic = (
+        "You are a data quality validator. Given rows of data and a validation rule, "
+        "count how many rows FAIL the rule. Return only valid JSON."
+    )
+    try:
+        from app.services.llm_providers import get_provider_from_db
+        from app.db.database import AsyncSessionLocal
+        async with AsyncSessionLocal() as llm_db:
+            provider = await get_provider_from_db(None, llm_db)
+        import json as _j
+        raw = await provider.complete(prompt, sys_semantic, max_tokens=200)
+        start = raw.find("{"); end = raw.rfind("}") + 1
+        result = _j.loads(raw[start:end]) if start >= 0 else {}
+        return int(result.get("failed_count", 0))
+    except Exception as e:
+        logger.warning(f"LLM semantic validation failed for rule {rule.rule_id}: {e}")
+        return 0
+
+
 async def execute_rule(rule_id: str, db: AsyncSession, user_email: str = "system") -> DQRuleRun:
     rule_res = await db.execute(select(DQRule).where(DQRule.rule_id == rule_id))
     rule = rule_res.scalar_one_or_none()
@@ -256,6 +294,12 @@ async def execute_rule(rule_id: str, db: AsyncSession, user_email: str = "system
             config = rule.rule_config or {}
             if config.get("min_rows") is None and config.get("max_rows") is None:
                 failed_count = await _volume_baseline_check(rule.rule_id, current_row_count, db)
+
+        # llm_semantic_check: SQL samples failing rows; LLM validates them
+        if rule.rule_type == "llm_semantic_check" and rows:
+            sample_rows = [dict(r) for r in rows]
+            failed_count = await _llm_semantic_validate(rule, sample_rows, db)
+            total_count = total_count or len(sample_rows)
 
         passed_count = max(0, total_count - failed_count)
         failure_pct = (failed_count / total_count * 100) if total_count > 0 else 0.0
