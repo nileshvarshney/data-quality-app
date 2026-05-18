@@ -298,28 +298,28 @@ export default function Sidebar() {
             {/* Row 1: logo + wordmark + collapse */}
             <div className="flex items-center gap-3">
 
-              {/* Logo — larger, crisper */}
-              <div className="shrink-0 w-10 h-10 rounded-xl overflow-hidden shadow-lg ring-1 ring-black/8">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="/logo-icon.svg"
-                  alt="Data Guardian"
-                  width={40} height={40}
-                  className="w-full h-full"
-                  style={{ imageRendering: 'crisp-edges' }}
-                />
-              </div>
-
-              {/* Wordmark */}
-              <div className="flex-1 min-w-0">
-                <p className="text-[13px] font-extrabold leading-tight tracking-[-0.4px] whitespace-nowrap">
-                  <span style={{ color: 'var(--sidebar-text)' }}>Data </span>
-                  <span style={{ color: '#F59E0B' }}>Guardian</span>
-                </p>
-                <p className="text-[10px] font-medium mt-0.5 truncate" style={{ color: 'var(--sidebar-subtle)' }}>
-                  Enterprise Platform
-                </p>
-              </div>
+              {/* Logo + Wordmark — click to go home */}
+              <Link href="/dashboard/global" className="flex items-center gap-3 flex-1 min-w-0 group">
+                <div className="shrink-0 w-10 h-10 rounded-xl overflow-hidden shadow-lg ring-1 ring-black/8">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/logo-icon.svg"
+                    alt="DataGuardian"
+                    width={40} height={40}
+                    className="w-full h-full"
+                    style={{ imageRendering: 'crisp-edges' }}
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[15px] font-extrabold leading-tight tracking-[-0.4px] whitespace-nowrap">
+                    <span style={{ color: 'var(--sidebar-text)' }}>Data</span>
+                    <span style={{ color: '#F59E0B' }}>Guardian</span>
+                  </p>
+                  <p className="text-[10px] font-medium mt-0.5 truncate" style={{ color: 'var(--sidebar-subtle)' }}>
+                    Data Quality &amp; Governance
+                  </p>
+                </div>
+              </Link>
 
               {/* Collapse button */}
               <button
@@ -331,25 +331,15 @@ export default function Sidebar() {
               </button>
             </div>
 
-            {/* Row 2: env badge + alert pill */}
+            {/* Row 2: alert pill */}
             <div className="flex items-center gap-2 mt-2.5">
-              <span className={clsx(
-                'text-[9px] font-extrabold px-2 py-0.5 rounded tracking-[0.1em] uppercase',
-                env === 'PROD' || env === 'PRODUCTION'
-                  ? 'bg-emerald-100 text-emerald-700'
-                  : env === 'STAGING'
-                  ? 'bg-amber-100 text-amber-700'
-                  : 'bg-blue-100 text-blue-700'
-              )}>
-                {env}
-              </span>
               {totalBadges > 0 && (
                 <span className="flex items-center gap-1 text-[9px] font-bold text-red-500">
                   <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0" />
                   {totalBadges} active
                 </span>
               )}
-              <span className="ml-auto text-[9px]" style={{ color: 'var(--sidebar-subtle)' }}>v3.0</span>
+              <span className="ml-auto text-[9px]" style={{ color: 'var(--sidebar-subtle)' }}>v0.1</span>
             </div>
 
             {/* Row 3: quick search */}
@@ -553,8 +543,8 @@ export default function Sidebar() {
           <p className="text-[9px] px-1 pt-0.5 flex items-center gap-1.5"
              style={{ color: 'var(--sidebar-subtle)' }}>
             <Zap size={9} className="text-blue-400" />
-            Data Guardian v3.0
-            <span className="ml-auto opacity-50">© 2026</span>
+            DataGuardian v0.1
+            <span className="ml-auto opacity-50">Decision Minds © 2026</span>
           </p>
         )}
       </div>

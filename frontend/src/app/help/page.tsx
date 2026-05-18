@@ -225,7 +225,7 @@ export default function HelpPage() {
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Help & Reference</h1>
         </div>
         <p className="text-sm text-gray-500">
-          Complete user manual for Data Guardian — the AI-powered Snowflake Data Intelligence Platform.
+          Complete user manual for DataGuardian — the AI-powered Snowflake Data Intelligence Platform.
           Use the sidebar to jump to any section.
         </p>
       </div>
@@ -258,7 +258,7 @@ export default function HelpPage() {
             <SectionTitle id="getting-started" icon={<BookOpen size={18}/>}>Getting Started</SectionTitle>
 
             <p className="text-sm text-gray-600 leading-relaxed mb-6">
-              Data Guardian is an enterprise command center for Snowflake data reliability. It lets
+              DataGuardian is an enterprise command center for Snowflake data reliability. It lets
               data engineering teams define, schedule, execute, and monitor hundreds of data quality rules across multiple
               business domains, with AI assistance to accelerate rule creation and failure diagnosis. Every quality
               result, alert, and governance event is stored historically so you can track trends, meet SLAs, and satisfy

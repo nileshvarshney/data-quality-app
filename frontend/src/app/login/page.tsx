@@ -97,7 +97,7 @@ export default function LoginPage() {
               <img src="/logo-icon.svg" alt="" width={26} height={26} />
             </div>
             <div>
-              <div className="text-white font-bold text-lg leading-none">Data Guardian</div>
+              <div className="text-white font-bold text-lg leading-none">DataGuardian</div>
               <div className="text-indigo-300 text-xs font-medium mt-0.5">Data Intelligence Platform</div>
             </div>
           </div>
@@ -168,14 +168,14 @@ export default function LoginPage() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo-icon.svg" alt="" width={22} height={22} />
           </div>
-          <span className="font-bold text-gray-900 text-lg">Data Guardian</span>
+          <span className="font-bold text-gray-900 text-lg">DataGuardian</span>
         </div>
 
         <div className="w-full max-w-[400px]">
           {/* Heading */}
           <div className="mb-8">
             <h1 className="text-2xl font-bold text-gray-900">Welcome back</h1>
-            <p className="text-gray-500 text-sm mt-1">Sign in to your Data Guardian account</p>
+            <p className="text-gray-500 text-sm mt-1">Sign in to your DataGuardian account</p>
           </div>
 
           {/* Error alert */}
@@ -340,7 +340,7 @@ export default function LoginPage() {
 
         {/* Footer */}
         <p className="absolute bottom-6 text-xs" style={{ color: '#cbd5e1' }}>
-          © {new Date().getFullYear()} Data Guardian — Enterprise Data Quality Platform
+          © {new Date().getFullYear()} DataGuardian — Enterprise Data Quality Platform
         </p>
       </div>
 

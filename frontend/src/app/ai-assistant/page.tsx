@@ -300,9 +300,9 @@ const STORAGE_KEY = 'dq_ai_chat_history_v2'
 const INPUT_MAX = 2000
 const WELCOME: Message = {
   role: 'assistant',
-  content: `### Welcome to Data Guardian AI
+  content: `### Welcome to DataGuardian AI
 
-I'm your AI expert for Data Guardian. I have live access to your platform data and can answer questions about:
+I'm your AI expert for DataGuardian. I have live access to your platform data and can answer questions about:
 
 - **Quality scores** — global, domain, subdomain, and table level
 - **Rules & executions** — failures, passing rates, execution history
