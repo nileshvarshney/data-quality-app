@@ -4,7 +4,14 @@ export function formatTs(
   opts?: { dateOnly?: boolean; withSeconds?: boolean; yearAlways?: boolean }
 ): string {
   if (!iso) return '—'
-  const d = new Date(iso)
+  // The backend stores naive UTC datetimes and serialises them via Python's
+  // .isoformat() which produces no timezone suffix (e.g. "2024-05-15T17:30:00").
+  // JavaScript's Date constructor treats timezone-free ISO strings as *local*
+  // time, not UTC, which breaks the configured-timezone conversion.
+  // Appending 'Z' forces UTC interpretation for any string that lacks an
+  // explicit offset (+HH:MM) or the Z suffix.
+  const normalized = /Z$|[+-]\d{2}:\d{2}$/.test(iso) ? iso : `${iso}Z`
+  const d = new Date(normalized)
   if (isNaN(d.getTime())) return '—'
 
   if (opts?.dateOnly) {
