@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc
 from app.db.models import (
     DQRule, DQRuleRun, Domain, Subdomain, DataAsset,
-    DQSchedule, DQAlert,
+    DQSchedule, DQAlert, GovernancePolicy, PolicyViolation,
 )
 from app.services.llm_providers import get_provider_from_db
 
@@ -87,7 +87,6 @@ Out of scope: anything unrelated to governance/compliance."""
 
 async def gather_governance_context(db: AsyncSession) -> dict:
     """Fetch live governance data: violations, pending approvals, policies."""
-    from app.db.models import GovernancePolicy, PolicyViolation, DQRule, DataAsset, Domain
     ctx: dict = {}
     try:
         # Open violations (up to 30)
