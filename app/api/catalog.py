@@ -197,6 +197,8 @@ async def catalog_search(
         all_results.sort(key=lambda x: x.get("trust_score") or 0, reverse=True)
     elif sort == "alphabetical":
         all_results.sort(key=lambda x: (x.get("name") or "").lower())
+    elif sort == "alphabetical_desc":
+        all_results.sort(key=lambda x: (x.get("name") or "").lower(), reverse=True)
 
     total = len(all_results)
     return {"results": all_results[offset: offset + page_size], "total": total, "page": page, "page_size": page_size}

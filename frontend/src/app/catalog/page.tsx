@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { Search, Loader2, LayoutGrid, List, SlidersHorizontal, Database, Tag } from 'lucide-react'
+import { Search, Loader2, LayoutGrid, List, SlidersHorizontal, Database, Tag, BookOpen, Package, LayoutList } from 'lucide-react'
 import clsx from 'clsx'
 import { catalogApi } from '@/services/apiClient'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
@@ -48,11 +48,19 @@ function SkeletonCard() {
 // ── Sort options ──────────────────────────────────────────────────────────────
 
 const SORT_OPTIONS = [
-  { value: 'relevance',    label: 'Relevance' },
-  { value: 'quality',      label: 'Quality Score' },
-  { value: 'trust',        label: 'Trust Score' },
-  { value: 'alphabetical', label: 'A → Z' },
-  { value: 'updated',      label: 'Last Updated' },
+  { value: 'relevance',        label: 'Relevance' },
+  { value: 'quality',          label: 'Quality Score' },
+  { value: 'trust',            label: 'Trust Score' },
+  { value: 'alphabetical',     label: 'A → Z' },
+  { value: 'alphabetical_desc',label: 'Z → A' },
+  { value: 'updated',          label: 'Last Updated' },
+]
+
+const ENTITY_TYPES = [
+  { value: undefined,      label: 'All',           icon: <LayoutList size={13} /> },
+  { value: 'asset',        label: 'Tables',         icon: <Database   size={13} /> },
+  { value: 'glossary',     label: 'Glossary Terms', icon: <BookOpen   size={13} /> },
+  { value: 'data_product', label: 'Data Products',  icon: <Package    size={13} /> },
 ]
 
 // ── Pagination ────────────────────────────────────────────────────────────────
@@ -248,6 +256,27 @@ export default function CatalogPage() {
       {/* Quick filters */}
       <QuickFilters activeFilters={filters} userEmail={user?.email ?? ''} onChange={handleFilterChange} />
 
+      {/* Entity type tabs */}
+      <div className="flex items-center gap-1 mb-4 border-b border-gray-200">
+        {ENTITY_TYPES.map(et => {
+          const active = filters.type === et.value
+          return (
+            <button
+              key={et.value ?? 'all'}
+              onClick={() => handleFilterChange('type', active ? undefined : et.value)}
+              className={clsx(
+                'flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium border-b-2 -mb-px transition-colors',
+                active
+                  ? 'border-blue-600 text-blue-700'
+                  : 'border-transparent text-gray-500 hover:text-gray-800 hover:border-gray-300'
+              )}
+            >
+              {et.icon}{et.label}
+            </button>
+          )
+        })}
+      </div>
+
       {/* Two-column layout */}
       <div className="flex gap-6">
         <CatalogFacets
@@ -289,7 +318,7 @@ export default function CatalogPage() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-gray-100 bg-gray-50">
-                          {['Name', 'Domain', 'Owner', 'Quality', 'Certification', 'Rating'].map(h => (
+                          {['Name', 'Type', 'Domain', 'Owner', 'Quality', 'Certification', 'Rating'].map(h => (
                             <th key={h} className="text-left text-xs font-semibold text-gray-500 px-3 py-2">{h}</th>
                           ))}
                         </tr>

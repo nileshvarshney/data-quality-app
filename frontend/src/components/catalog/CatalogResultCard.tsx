@@ -12,10 +12,10 @@ const CLASSIFICATION_COLORS: Record<string, string> = {
   PUBLIC:       'bg-green-100 text-green-700',
 }
 
-const ENTITY_ICON: Record<string, React.ReactNode> = {
-  asset:        <Database size={12} />,
-  glossary:     <BookOpen size={12} />,
-  data_product: <Package  size={12} />,
+const ENTITY_BADGE: Record<string, { icon: React.ReactNode; label: string; cls: string }> = {
+  asset:        { icon: <Database size={11} />, label: 'Table',        cls: 'bg-blue-50 text-blue-700 border-blue-100' },
+  glossary:     { icon: <BookOpen size={11} />, label: 'Glossary',     cls: 'bg-purple-50 text-purple-700 border-purple-100' },
+  data_product: { icon: <Package  size={11} />, label: 'Data Product', cls: 'bg-teal-50 text-teal-700 border-teal-100' },
 }
 
 const ENTITY_HREF: Record<string, (id: string) => string> = {
@@ -40,8 +40,8 @@ export interface CatalogItem {
 }
 
 export default function CatalogResultCard({ item }: { item: CatalogItem }) {
-  const href = (ENTITY_HREF[item.entity_type] ?? ENTITY_HREF.asset)(item.id)
-  const icon = ENTITY_ICON[item.entity_type] ?? ENTITY_ICON.asset
+  const href  = (ENTITY_HREF[item.entity_type] ?? ENTITY_HREF.asset)(item.id)
+  const badge = ENTITY_BADGE[item.entity_type] ?? ENTITY_BADGE.asset
 
   return (
     <Link
@@ -61,9 +61,11 @@ export default function CatalogResultCard({ item }: { item: CatalogItem }) {
             {item.certification_status && (
               <CertificationBadge status={item.certification_status} />
             )}
-            <span className="flex items-center gap-1 text-xs text-gray-400 ml-auto shrink-0">
-              {icon}
-              <span className="capitalize">{item.entity_type.replace('_', ' ')}</span>
+            <span className={clsx(
+              'inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border ml-auto shrink-0',
+              badge.cls
+            )}>
+              {badge.icon}{badge.label}
             </span>
           </div>
 
