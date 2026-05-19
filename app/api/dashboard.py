@@ -720,6 +720,8 @@ async def quality_dimensions(
     user: dict = Depends(get_current_user),
 ):
     """Return quality scores grouped by data quality dimension for today's runs."""
+    if domain_id:
+        check_domain_access(user, domain_id)
     domain_scope = domain_id or get_domain_filter(user)
     today = datetime.now(timezone.utc).replace(tzinfo=None).date()
 
