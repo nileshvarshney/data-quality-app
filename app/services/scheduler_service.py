@@ -355,6 +355,39 @@ async def _refresh_catalog_index() -> None:
         _log.error("Nightly catalog index refresh failed: %s", exc)
 
 
+async def _bg_predict_all_assets() -> None:
+    """Nightly job: run LLM quality prediction for all active assets."""
+    import asyncio
+    _log = logging.getLogger("dq_platform.prediction")
+    try:
+        from app.db.database import AsyncSessionLocal
+        from app.db.models import DataAsset
+        from app.services.ai_service import predict_asset_quality
+        from sqlalchemy import select
+
+        async with AsyncSessionLocal() as db:
+            assets_res = await db.execute(
+                select(DataAsset.asset_id).where(DataAsset.is_active == True).limit(200)
+            )
+            asset_ids = [r for r in assets_res.scalars().all()]
+
+        _log.info(f"Starting nightly quality prediction for {len(asset_ids)} assets")
+        success = 0
+        for asset_id in asset_ids:
+            try:
+                async with AsyncSessionLocal() as db:
+                    result = await predict_asset_quality(asset_id, None, db)
+                    if "error" not in result:
+                        success += 1
+            except Exception as exc:
+                _log.warning(f"Prediction failed for asset {asset_id}: {exc}")
+            await asyncio.sleep(0.5)
+
+        _log.info(f"Nightly prediction complete: {success}/{len(asset_ids)} assets predicted")
+    except Exception as exc:
+        _log.error(f"Nightly prediction job failed: {exc}")
+
+
 def start_scheduler():
     if not scheduler.running:
         scheduler.start()
@@ -364,6 +397,13 @@ def start_scheduler():
             trigger=CronTrigger(hour=0, minute=30, timezone=settings.default_timezone),
             id="catalog_index_refresh",
             replace_existing=True,
+        )
+        scheduler.add_job(
+            _bg_predict_all_assets,
+            trigger=CronTrigger(hour=2, minute=0, timezone="UTC"),
+            id="nightly_quality_prediction",
+            replace_existing=True,
+            misfire_grace_time=3600,
         )
 
 
