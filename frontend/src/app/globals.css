@@ -624,3 +624,29 @@ html.dark .react-flow__edge path {
 }
 /* Remove ReactFlow default attribution link */
 .react-flow__attribution { display: none; }
+
+/* ── Dashboard KPI chip tinted backgrounds (dark mode) ───────────────────── */
+
+.chip-passed-dark  { background: #052e16; border-color: #14532d; }
+.chip-failed-dark  { background: #1a0a0a; border-color: #7f1d1d; }
+.chip-issues-dark  { background: #1c0f00; border-color: #78350f; }
+.chip-anomaly-dark { background: #1a0d2e; border-color: #4c1d95; }
+
+.score-card-dark {
+  background: linear-gradient(145deg, #052e16, #14532d, #166534);
+  border-color: #15803d;
+  box-shadow: 0 6px 20px rgba(34, 197, 94, 0.12);
+}
+
+/* ── Dashboard dimension sub-card backgrounds ────────────────────────────── */
+.dim-completeness { background: #f0f7ff; border-color: #bfdbfe; }
+.dim-freshness    { background: #f0fdf4; border-color: #bbf7d0; }
+.dim-consistency  { background: #faf5ff; border-color: #e9d5ff; }
+.dim-accuracy     { background: #fff7ed; border-color: #fed7aa; }
+.dim-bizrule      { background: #fef2f2; border-color: #fecaca; }
+
+html.dark .dim-completeness,
+html.dark .dim-freshness,
+html.dark .dim-consistency,
+html.dark .dim-accuracy,
+html.dark .dim-bizrule { background: #0d1d3a; border-color: #1e3a5f; }
