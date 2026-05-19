@@ -681,6 +681,73 @@ async def asset_remediation_plan(
         raise _llm_err(e)
 
 
+@router.post("/rules/{rule_id}/remediation-playbook")
+@limiter.limit("20/minute")
+async def rule_remediation_playbook(
+    request: Request,
+    rule_id: str,
+    payload: dict = {},
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Generate a focused remediation playbook for a specific rule."""
+    from sqlalchemy import select, desc
+    from app.db.models import DQRule, DQRuleRun, DataAsset
+    from app.services.llm_providers import get_provider_from_db
+    from app.services.ai_service import _REMEDIATION_HINTS
+    import json as _j
+
+    rule_res = await db.execute(select(DQRule).where(DQRule.rule_id == rule_id))
+    rule = rule_res.scalar_one_or_none()
+    if not rule:
+        raise HTTPException(404, "Rule not found")
+
+    asset_res = await db.execute(select(DataAsset).where(DataAsset.asset_id == rule.asset_id))
+    asset = asset_res.scalar_one_or_none()
+
+    runs_res = await db.execute(
+        select(DQRuleRun)
+        .where(DQRuleRun.rule_id == rule_id)
+        .order_by(desc(DQRuleRun.created_at))
+        .limit(20)
+    )
+    runs = runs_res.scalars().all()
+    fail_pcts = [r.failure_percentage for r in runs if r.failure_percentage is not None]
+    avg_fail  = sum(fail_pcts) / len(fail_pcts) if fail_pcts else 0
+    fail_count = sum(1 for r in runs if r.status in ("failed", "error"))
+
+    hint = _REMEDIATION_HINTS.get(rule.rule_type, "Review rule logic and source data quality.")
+
+    sys_play = (
+        "You are a data engineering expert. Generate a 3-5 step remediation playbook. "
+        "Return ONLY valid JSON: {\"playbook_title\": \"...\", \"steps\": [{\"step\": N, "
+        "\"action\": \"...\", \"who\": \"...\", \"how\": \"...\", \"done_when\": \"...\"}], "
+        "\"prevention_tip\": \"single sentence\"}"
+    )
+    prompt = (
+        f"Rule: {rule.rule_name}\n"
+        f"Type: {rule.rule_type}\n"
+        f"Severity: {rule.severity}\n"
+        f"Column: {rule.target_column or 'N/A'}\n"
+        f"Table: {asset.sf_table_name if asset else rule.asset_id}\n"
+        f"Description: {rule.rule_description or 'N/A'}\n"
+        f"Last {len(runs)} runs: {fail_count} failed, avg failure rate {avg_fail:.1f}%\n"
+        f"Rule config: {rule.rule_config}\n"
+        f"Playbook hint: {hint}\n\n"
+        "Generate a specific remediation playbook."
+    )
+
+    try:
+        provider = await get_provider_from_db(payload.get("provider"), db)
+        raw = await provider.complete(prompt, sys_play, max_tokens=900)
+        start = raw.find("{"); end = raw.rfind("}") + 1
+        playbook = _j.loads(raw[start:end]) if start >= 0 else {}
+    except Exception as e:
+        raise HTTPException(503, f"LLM error: {e}")
+
+    return {"rule_id": rule_id, "rule_name": rule.rule_name, "rule_type": rule.rule_type, "playbook": playbook}
+
+
 @router.post("/incidents/{incident_id}/generate-postmortem")
 async def generate_postmortem(
     incident_id: str,
