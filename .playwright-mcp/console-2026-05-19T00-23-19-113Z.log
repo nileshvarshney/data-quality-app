@@ -1,0 +1,6 @@
+[     262ms] [LOG] [Fast Refresh] rebuilding @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/react-dev-overlay/app/hot-reloader-client.js:240
+[    1579ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:24650
+[    2107ms] [ERROR] Access to XMLHttpRequest at 'http://localhost:8000/catalog/facets' from origin 'http://localhost:3000' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:3000/catalog/:0
+[    2109ms] [ERROR] Failed to load resource: net::ERR_FAILED @ http://localhost:8000/catalog/facets:0
+[    2123ms] [ERROR] Access to XMLHttpRequest at 'http://localhost:8000/catalog/facets' from origin 'http://localhost:3000' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:3000/catalog/:0
+[    2124ms] [ERROR] Failed to load resource: net::ERR_FAILED @ http://localhost:8000/catalog/facets:0

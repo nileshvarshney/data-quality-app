@@ -1,0 +1,48 @@
+[     612ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:24650
+[  112096ms] [ERROR] Failed to load resource: the server responded with a status of 503 (Service Unavailable) @ http://localhost:8000/ai/assets/821d2a52-6214-46d2-aef1-243dfa572494/generate-description:0
+[  112100ms] [ERROR] API 503 error on /ai/assets/821d2a52-6214-46d2-aef1-243dfa572494/generate-description: {detail: Model 'qwen2.5:7b-instruct' not found in Ollama. A…st. Update the model name in Settings → LLM / AI.} @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/globals/intercept-console-error.js:50
+[  131333ms] [ERROR] Failed to load resource: the server responded with a status of 503 (Service Unavailable) @ http://localhost:8000/ai/assets/821d2a52-6214-46d2-aef1-243dfa572494/generate-description:0
+[  131335ms] [ERROR] API 503 error on /ai/assets/821d2a52-6214-46d2-aef1-243dfa572494/generate-description: {detail: Model 'qwen2.5:7b-instruct' not found in Ollama. A…st. Update the model name in Settings → LLM / AI.} @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/globals/intercept-console-error.js:50
+[  136454ms] [ERROR] Failed to load resource: the server responded with a status of 503 (Service Unavailable) @ http://localhost:8000/ai/assets/821d2a52-6214-46d2-aef1-243dfa572494/generate-description:0
+[  136454ms] [ERROR] API 503 error on /ai/assets/821d2a52-6214-46d2-aef1-243dfa572494/generate-description: {detail: Model 'qwen2.5:7b-instruct' not found in Ollama. A…st. Update the model name in Settings → LLM / AI.} @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/globals/intercept-console-error.js:50
+[  147099ms] [LOG] [Fast Refresh] rebuilding @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/react-dev-overlay/app/hot-reloader-client.js:240
+[  148500ms] [LOG] [Fast Refresh] done in 1403ms @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/react-dev-overlay/app/hot-reloader-client.js:67
+[  173356ms] [ERROR] Failed to load resource: the server responded with a status of 503 (Service Unavailable) @ http://localhost:8000/ai/assets/821d2a52-6214-46d2-aef1-243dfa572494/generate-description:0
+[  173357ms] [ERROR] API 503 error on /ai/assets/821d2a52-6214-46d2-aef1-243dfa572494/generate-description: {detail: Model 'qwen2.5:7b-instruct' not found in Ollama. A…st. Update the model name in Settings → LLM / AI.} @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/globals/intercept-console-error.js:50
+[  224070ms] [LOG] [Fast Refresh] rebuilding @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/react-dev-overlay/app/hot-reloader-client.js:240
+[  225493ms] [LOG] [Fast Refresh] done in 1426ms @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/react-dev-overlay/app/hot-reloader-client.js:67
+[  236578ms] [LOG] [Fast Refresh] rebuilding @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/react-dev-overlay/app/hot-reloader-client.js:240
+[  237407ms] [LOG] [Fast Refresh] done in 829ms @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/react-dev-overlay/app/hot-reloader-client.js:67
+[  243096ms] [LOG] [Fast Refresh] rebuilding @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/react-dev-overlay/app/hot-reloader-client.js:240
+[  244061ms] [LOG] [Fast Refresh] done in 966ms @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/react-dev-overlay/app/hot-reloader-client.js:67
+[  253372ms] [LOG] [Fast Refresh] rebuilding @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/react-dev-overlay/app/hot-reloader-client.js:240
+[  255469ms] [LOG] [Fast Refresh] done in 2099ms @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/react-dev-overlay/app/hot-reloader-client.js:67
+[  255936ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8000/domains:0
+[  255936ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8000/assets/enriched:0
+[  255936ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8000/rules:0
+[  255936ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8000/subdomains:0
+[  255937ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8000/runs/enriched?asset_id=821d2a52-6214-46d2-aef1-243dfa572494&date_from=2026-05-16&date_to=2026-05-19&limit=1000:0
+[  255940ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8000/runs/enriched?asset_id=821d2a52-6214-46d2-aef1-243dfa572494&date_from=2026-05-16&date_to=2026-05-19&limit=1000:0
+[  255940ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8000/assets/enriched:0
+[  255940ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8000/domains:0
+[  255940ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8000/rules:0
+[  255940ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8000/subdomains:0
+[  255940ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8000/subdomains:0
+[  255940ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8000/subdomains:0
+[  256070ms] AxiosError: Network Error
+    at XMLHttpRequest.handleError (webpack-internal:///(app-pages-browser)/./node_modules/axios/lib/adapters/xhr.js:137:21)
+[  256071ms] AxiosError: Network Error
+    at XMLHttpRequest.handleError (webpack-internal:///(app-pages-browser)/./node_modules/axios/lib/adapters/xhr.js:137:21)
+[  256071ms] AxiosError: Network Error
+    at XMLHttpRequest.handleError (webpack-internal:///(app-pages-browser)/./node_modules/axios/lib/adapters/xhr.js:137:21)
+[  256071ms] AxiosError: Network Error
+    at XMLHttpRequest.handleError (webpack-internal:///(app-pages-browser)/./node_modules/axios/lib/adapters/xhr.js:137:21)
+[  256071ms] AxiosError: Network Error
+    at XMLHttpRequest.handleError (webpack-internal:///(app-pages-browser)/./node_modules/axios/lib/adapters/xhr.js:137:21)
+[  256071ms] AxiosError: Network Error
+    at XMLHttpRequest.handleError (webpack-internal:///(app-pages-browser)/./node_modules/axios/lib/adapters/xhr.js:137:21)
+[  306951ms] [LOG] [Fast Refresh] rebuilding @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/react-dev-overlay/app/hot-reloader-client.js:240
+[  307611ms] [LOG] [Fast Refresh] done in 662ms @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/react-dev-overlay/app/hot-reloader-client.js:67
+[  310418ms] [ERROR] Each child in a list should have a unique "key" prop.%s%s See https://react.dev/link/warning-keys for more information. 
+
+Check the render method of `ScorecardsTab`.  @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/components/globals/intercept-console-error.js:50

@@ -1,0 +1,472 @@
+- generic [active] [ref=e1]:
+  - complementary [ref=e2]:
+    - generic [ref=e4]:
+      - generic [ref=e5]:
+        - link "DataGuardian DataGuardian Data Quality & Governance" [ref=e6] [cursor=pointer]:
+          - /url: /dashboard/global/
+          - img "DataGuardian" [ref=e8]
+          - generic [ref=e9]:
+            - paragraph [ref=e10]: DataGuardian
+            - paragraph [ref=e11]: Data Quality & Governance
+        - button "Collapse sidebar" [ref=e12] [cursor=pointer]:
+          - img [ref=e13]
+      - button "Quick search… ⌘K" [ref=e16] [cursor=pointer]:
+        - img [ref=e17]
+        - generic [ref=e20]: Quick search…
+        - generic [ref=e21]: ⌘K
+      - generic [ref=e23]: v0.1
+    - navigation [ref=e24]:
+      - generic [ref=e25]:
+        - button "Overview" [ref=e26] [cursor=pointer]:
+          - generic [ref=e27]: Overview
+          - img [ref=e29]
+        - generic [ref=e31]:
+          - link "Global Dashboard" [ref=e32] [cursor=pointer]:
+            - /url: /dashboard/global/
+            - img [ref=e34]
+            - generic [ref=e37]: Global Dashboard
+          - link "Cost Impact Dashboard" [ref=e38] [cursor=pointer]:
+            - /url: /executive/
+            - img [ref=e40]
+            - generic [ref=e41]: Cost Impact Dashboard
+      - generic [ref=e42]:
+        - button "Data Quality" [ref=e43] [cursor=pointer]:
+          - generic [ref=e44]: Data Quality
+          - img [ref=e46]
+        - generic [ref=e48]:
+          - link "Rules" [ref=e49] [cursor=pointer]:
+            - /url: /rules/
+            - img [ref=e51]
+            - generic [ref=e53]: Rules
+          - link "Approval Queue" [ref=e54] [cursor=pointer]:
+            - /url: /rules/approval-queue/
+            - img [ref=e56]
+            - generic [ref=e60]: Approval Queue
+          - link "Data Assets" [ref=e61] [cursor=pointer]:
+            - /url: /assets/
+            - img [ref=e63]
+            - generic [ref=e67]: Data Assets
+          - link "Schedules" [ref=e68] [cursor=pointer]:
+            - /url: /schedules/
+            - img [ref=e70]
+            - generic [ref=e72]: Schedules
+          - link "Execution Logs" [ref=e73] [cursor=pointer]:
+            - /url: /runs/
+            - img [ref=e75]
+            - generic [ref=e78]: Execution Logs
+      - generic [ref=e79]:
+        - button "Operations" [ref=e80] [cursor=pointer]:
+          - generic [ref=e81]: Operations
+          - img [ref=e83]
+        - generic [ref=e85]:
+          - link "Alerts" [ref=e86] [cursor=pointer]:
+            - /url: /alerts/
+            - img [ref=e88]
+            - generic [ref=e91]: Alerts
+          - link "Audit Logs" [ref=e92] [cursor=pointer]:
+            - /url: /audit/
+            - img [ref=e94]
+            - generic [ref=e97]: Audit Logs
+      - generic [ref=e98]:
+        - button "Data Catalog" [ref=e99] [cursor=pointer]:
+          - generic [ref=e100]: Data Catalog
+          - img [ref=e102]
+        - generic [ref=e104]:
+          - link "Data Catalog" [ref=e105] [cursor=pointer]:
+            - /url: /catalog/
+            - img [ref=e107]
+            - generic [ref=e110]: Data Catalog
+          - link "Glossary" [ref=e111] [cursor=pointer]:
+            - /url: /glossary/
+            - img [ref=e113]
+            - generic [ref=e115]: Glossary
+          - link "Data Products" [ref=e116] [cursor=pointer]:
+            - /url: /data-products/
+            - img [ref=e118]
+            - generic [ref=e122]: Data Products
+      - generic [ref=e123]:
+        - button "Governance" [ref=e124] [cursor=pointer]:
+          - generic [ref=e125]: Governance
+          - img [ref=e127]
+        - generic [ref=e129]:
+          - link "Governance Hub" [ref=e130] [cursor=pointer]:
+            - /url: /governance/
+            - img [ref=e132]
+            - generic [ref=e136]: Governance Hub
+          - link "Data Contracts" [ref=e137] [cursor=pointer]:
+            - /url: /contracts/
+            - img [ref=e139]
+            - generic [ref=e142]: Data Contracts
+          - link "Incidents" [ref=e143] [cursor=pointer]:
+            - /url: /incidents/
+            - img [ref=e145]
+            - generic [ref=e147]: Incidents
+          - link "Rule Marketplace" [ref=e148] [cursor=pointer]:
+            - /url: /marketplace/
+            - img [ref=e150]
+            - generic [ref=e153]: Rule Marketplace
+      - generic [ref=e154]:
+        - button "Privacy & Compliance" [ref=e155] [cursor=pointer]:
+          - generic [ref=e156]: Privacy & Compliance
+          - img [ref=e158]
+        - link "Compliance" [ref=e161] [cursor=pointer]:
+          - /url: /compliance/
+          - img [ref=e163]
+          - generic [ref=e165]: Compliance
+      - generic [ref=e166]:
+        - button "AI Intelligence" [ref=e167] [cursor=pointer]:
+          - generic [ref=e168]: AI Intelligence
+          - img [ref=e170]
+        - generic [ref=e172]:
+          - button "AI Copilot" [ref=e173] [cursor=pointer]:
+            - img [ref=e175]
+            - generic [ref=e177]: AI Copilot
+          - link "AI Assistant" [ref=e178] [cursor=pointer]:
+            - /url: /ai-assistant/
+            - img [ref=e180]
+            - generic [ref=e192]: AI Assistant
+      - generic [ref=e193]:
+        - button "Support" [ref=e194] [cursor=pointer]:
+          - generic [ref=e195]: Support
+          - img [ref=e197]
+        - link "Help & Reference" [ref=e200] [cursor=pointer]:
+          - /url: /help/
+          - img [ref=e202]
+          - generic [ref=e205]: Help & Reference
+      - generic [ref=e206]:
+        - button "Administration" [ref=e207] [cursor=pointer]:
+          - generic [ref=e208]: Administration
+          - img [ref=e210]
+        - generic [ref=e212]:
+          - link "Domain Management" [ref=e213] [cursor=pointer]:
+            - /url: /admin/domains/
+            - img [ref=e215]
+            - generic [ref=e217]: Domain Management
+          - link "User Management" [ref=e218] [cursor=pointer]:
+            - /url: /admin/users/
+            - img [ref=e220]
+            - generic [ref=e223]: User Management
+          - link "Data Cleanup" [ref=e224] [cursor=pointer]:
+            - /url: /admin/cleanup/
+            - img [ref=e226]
+            - generic [ref=e229]: Data Cleanup
+          - link "Settings" [ref=e230] [cursor=pointer]:
+            - /url: /settings/
+            - img [ref=e232]
+            - generic [ref=e235]: Settings
+    - generic [ref=e236]:
+      - generic [ref=e237]:
+        - generic [ref=e238]: SA
+        - generic [ref=e239]:
+          - paragraph [ref=e240]: System Admin
+          - generic [ref=e241]: Admin
+        - generic [ref=e242]:
+          - button "Switch to dark mode" [ref=e243] [cursor=pointer]:
+            - img [ref=e244]
+          - button "Sign out" [ref=e246] [cursor=pointer]:
+            - img [ref=e247]
+      - paragraph [ref=e250]:
+        - img [ref=e251]
+        - text: DataGuardian v0.1
+        - generic [ref=e253]: Decision Minds © 2026
+  - main [ref=e254]:
+    - generic [ref=e255]:
+      - navigation [ref=e256]:
+        - link [ref=e257] [cursor=pointer]:
+          - /url: /dashboard/global/
+          - img [ref=e258]
+        - generic [ref=e261]:
+          - img [ref=e262]
+          - link "Global" [ref=e264] [cursor=pointer]:
+            - /url: /dashboard/global/
+        - generic [ref=e265]:
+          - img [ref=e266]
+          - link "Domain" [ref=e268] [cursor=pointer]:
+            - /url: /dashboard/domains/4a9140ce-0f2e-4c62-af4d-1d256c35d86e/
+        - generic [ref=e269]:
+          - img [ref=e270]
+          - link "Subdomain" [ref=e272] [cursor=pointer]:
+            - /url: /dashboard/subdomains/6faa8029-74c0-40af-b446-c705bbbc6481/
+        - generic [ref=e273]:
+          - img [ref=e274]
+          - generic [ref=e276]: PUBLIC_DATA_FREE.BANK_FOR_INTERNATIONAL_SETTLEMENTS_ATTRIBUTES
+      - generic [ref=e277]:
+        - generic [ref=e278]:
+          - generic [ref=e279]:
+            - heading "PUBLIC_DATA_FREE.BANK_FOR_INTERNATIONAL_SETTLEMENTS_ATTRIBUTES" [level=1] [ref=e280]
+            - generic [ref=e281]:
+              - img [ref=e282]
+              - text: Uncertified
+          - paragraph [ref=e284]:
+            - generic [ref=e285]: Analytics Team ·
+            - text: No runs yet
+        - generic [ref=e286]:
+          - generic [ref=e287]:
+            - img [ref=e288]
+            - text: Updated 05:26 PM
+          - button "Generate Description" [ref=e291] [cursor=pointer]:
+            - img [ref=e292]
+            - text: Generate Description
+          - button "Remediation Plan" [ref=e294] [cursor=pointer]:
+            - img [ref=e295]
+            - text: Remediation Plan
+          - link "View Logs" [ref=e297] [cursor=pointer]:
+            - /url: /runs/?asset_id=821d2a52-6214-46d2-aef1-243dfa572494
+          - button "Refresh" [ref=e298] [cursor=pointer]:
+            - img [ref=e299]
+            - text: Refresh
+          - button "Run All Rules" [ref=e304] [cursor=pointer]:
+            - img [ref=e305]
+            - text: Run All Rules
+      - generic [ref=e307]:
+        - button "Quality" [ref=e308] [cursor=pointer]:
+          - img [ref=e309]
+          - text: Quality
+        - button "Schema" [ref=e311] [cursor=pointer]:
+          - img [ref=e312]
+          - text: Schema
+        - button "Lineage" [ref=e314] [cursor=pointer]:
+          - img [ref=e315]
+          - text: Lineage
+        - button "Schema Drift" [ref=e320] [cursor=pointer]:
+          - img [ref=e321]
+          - text: Schema Drift
+        - button "Profile Trends" [ref=e326] [cursor=pointer]:
+          - img [ref=e327]
+          - text: Profile Trends
+      - generic [ref=e330]:
+        - generic [ref=e331]:
+          - generic [ref=e332]:
+            - img [ref=e333]
+            - generic [ref=e337]: 100.0%
+          - generic [ref=e338]:
+            - generic [ref=e339]:
+              - generic [ref=e340]:
+                - paragraph [ref=e341]: Quality Score
+                - 'img "Info: Quality Score" [ref=e343]'
+              - paragraph [ref=e345]: Excellent
+            - generic [ref=e346]: SLA Met
+            - generic [ref=e347]:
+              - paragraph [ref=e348]: 30-day trend
+              - img [ref=e351]
+        - generic [ref=e352]:
+          - generic [ref=e353]:
+            - generic [ref=e354]:
+              - img [ref=e356]
+              - generic [ref=e358]:
+                - paragraph [ref=e359]: Total Rules
+                - 'img "Info: Active Rules" [ref=e361]'
+            - paragraph [ref=e363]: "0"
+          - generic [ref=e364]:
+            - generic [ref=e365]:
+              - img [ref=e367]
+              - generic [ref=e370]:
+                - paragraph [ref=e371]: Passed
+                - 'img "Info: Passed Today" [ref=e373]'
+            - paragraph [ref=e375]: "0"
+          - generic [ref=e376]:
+            - generic [ref=e377]:
+              - img [ref=e379]
+              - generic [ref=e383]:
+                - paragraph [ref=e384]: Failed
+                - 'img "Info: Failed Today" [ref=e386]'
+            - paragraph [ref=e388]: "0"
+          - generic [ref=e389]:
+            - generic [ref=e390]:
+              - img [ref=e392]
+              - paragraph [ref=e395]: Warnings
+            - paragraph [ref=e396]: "0"
+      - generic [ref=e397]:
+        - generic [ref=e398]:
+          - generic [ref=e399]:
+            - img [ref=e400]
+            - paragraph [ref=e402]: Pass Rate
+          - generic [ref=e403]: 0%
+        - generic [ref=e405]:
+          - generic [ref=e406]: 0 passed
+          - generic [ref=e407]: 0 total
+          - generic [ref=e408]: 0 failed
+      - generic [ref=e409]:
+        - heading "Quality Score Trend" [level=3] [ref=e410]
+        - paragraph [ref=e411]: 30-day rolling · green = SLA 95%, amber = warning 80%
+        - img [ref=e414]:
+          - generic [ref=e419]:
+            - generic [ref=e421]: 4/19
+            - generic [ref=e423]: 4/20
+            - generic [ref=e425]: 4/21
+            - generic [ref=e427]: 4/22
+            - generic [ref=e429]: 4/23
+            - generic [ref=e431]: 4/24
+            - generic [ref=e433]: 4/25
+            - generic [ref=e435]: 4/26
+            - generic [ref=e437]: 4/27
+            - generic [ref=e439]: 4/28
+            - generic [ref=e441]: 4/29
+            - generic [ref=e443]: 4/30
+            - generic [ref=e445]: 5/1
+            - generic [ref=e447]: 5/2
+            - generic [ref=e449]: 5/3
+            - generic [ref=e451]: 5/4
+            - generic [ref=e453]: 5/5
+            - generic [ref=e455]: 5/6
+            - generic [ref=e457]: 5/7
+            - generic [ref=e459]: 5/8
+            - generic [ref=e461]: 5/9
+            - generic [ref=e463]: 5/10
+            - generic [ref=e465]: 5/11
+            - generic [ref=e467]: 5/12
+            - generic [ref=e469]: 5/13
+            - generic [ref=e471]: 5/14
+            - generic [ref=e473]: 5/15
+            - generic [ref=e475]: 5/16
+            - generic [ref=e477]: 5/17
+            - generic [ref=e479]: 5/18
+          - generic [ref=e481]:
+            - generic [ref=e483]: "0"
+            - generic [ref=e485]: "25"
+            - generic [ref=e487]: "50"
+            - generic [ref=e489]: "75"
+            - generic [ref=e491]: "100"
+          - generic [ref=e493]: SLA 95%
+          - generic [ref=e495]: Warn 80%
+      - generic [ref=e496]:
+        - generic [ref=e497]:
+          - img [ref=e498]
+          - heading "All Rules (0)" [level=3] [ref=e502]
+        - table [ref=e504]:
+          - rowgroup [ref=e505]:
+            - row "Rule Type Severity Status Score Last Run" [ref=e506]:
+              - columnheader "Rule" [ref=e507]
+              - columnheader "Type" [ref=e508]
+              - columnheader "Severity" [ref=e509]
+              - columnheader "Status" [ref=e510]
+              - columnheader "Score" [ref=e511]
+              - columnheader "Last Run" [ref=e512]
+              - columnheader [ref=e513]
+          - rowgroup [ref=e514]:
+            - row "No rules configured for this table" [ref=e515]:
+              - cell "No rules configured for this table" [ref=e516]
+  - dialog "AI Copilot":
+    - generic:
+      - generic:
+        - generic:
+          - img
+        - generic:
+          - generic:
+            - paragraph: AI Copilot
+            - generic:
+              - img
+              - text: quick access
+          - paragraph: Live data · multi-source · conversation memory
+      - generic:
+        - button "Clear conversation":
+          - img
+        - link "Open full-page AI Assistant":
+          - /url: /ai-assistant/
+          - img
+        - button:
+          - img
+    - generic:
+      - button "Create Rule":
+        - img
+        - text: Create Rule
+      - generic: Live data · LLM formatted
+    - generic:
+      - button "Why did quality drop today?"
+      - button "Overall quality score"
+      - button "Revenue domain health"
+      - button "Failed rules this week"
+      - button "Open critical alerts"
+      - button "Governance violations"
+      - button "Tables with no owners"
+      - button "Data contracts at risk"
+      - button "Finance quality trend"
+      - button "Active incidents"
+      - button "Cost of bad data"
+      - button "Show HR failing rules"
+    - generic:
+      - generic:
+        - generic:
+          - img
+        - generic:
+          - generic:
+            - generic:
+              - paragraph:
+                - text: Hi! I'm your
+                - strong: AI Copilot
+                - text: — a superman data intelligence assistant with live access to every corner of this platform.
+              - paragraph:
+                - strong: "What I can answer:"
+              - list:
+                - listitem:
+                  - generic: •
+                  - generic:
+                    - strong: Quality
+                    - text: — overall score, domain health, failing rules, trends
+                - listitem:
+                  - generic: •
+                  - generic:
+                    - strong: Root Cause
+                    - text: — why quality dropped, which rules are breaking, patterns
+                - listitem:
+                  - generic: •
+                  - generic:
+                    - strong: Governance
+                    - text: — policy violations, scorecards, uncertified tables, PII gaps
+                - listitem:
+                  - generic: •
+                  - generic:
+                    - strong: Contracts
+                    - text: — data contracts, SLA violations, producer/consumer health
+                - listitem:
+                  - generic: •
+                  - generic:
+                    - strong: Incidents
+                    - text: — open incidents, MTTD, MTTR, blast radius
+                - listitem:
+                  - generic: •
+                  - generic:
+                    - strong: Catalog
+                    - text: — popular assets, data products, business glossary
+                - listitem:
+                  - generic: •
+                  - generic:
+                    - strong: Lineage
+                    - text: — upstream/downstream dependencies, impact analysis
+                - listitem:
+                  - generic: •
+                  - generic:
+                    - strong: Compliance
+                    - text: — GDPR, SOX, HIPAA framework gaps
+                - listitem:
+                  - generic: •
+                  - generic:
+                    - strong: Cost
+                    - text: — bad data ROI, incident cost by domain
+                - listitem:
+                  - generic: •
+                  - generic:
+                    - strong: Alerts
+                    - text: — open critical alerts, severity breakdowns
+              - paragraph:
+                - text: "Try:"
+                - emphasis: "\"Why did Revenue quality drop?\""
+                - text: or
+                - emphasis: "\"Which Finance tables failed this week?\""
+            - generic:
+              - generic:
+                - img
+                - text: AI · live data
+              - button "Copy":
+                - img
+                - text: Copy
+    - generic:
+      - generic:
+        - textbox "Ask about quality, governance, contracts, incidents…"
+        - button [disabled]:
+          - img
+  - button "Open AI Copilot (quick access)" [ref=e517] [cursor=pointer]:
+    - img [ref=e518]
+  - region "Notifications alt+T"
+  - alert [ref=e520]
+  - generic [ref=e521]: "0"
