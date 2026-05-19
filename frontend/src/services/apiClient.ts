@@ -90,6 +90,8 @@ export const assetsApi = {
   getProfileStatus: (id: string, jobId: string) => api.get(`/assets/${id}/columns/profile/status`, { params: { job_id: jobId } }),
   certify: (id: string, certificationStatus: string, certifiedBy?: string) =>
     api.post(`/assets/${id}/certify`, { certification_status: certificationStatus, certified_by: certifiedBy }),
+  discover: (data: object) => api.post('/assets/discovery', data),
+  getDiscoveryJob: (jobId: string) => api.get(`/assets/discovery/jobs/${jobId}`),
 }
 
 // Snowflake Connections

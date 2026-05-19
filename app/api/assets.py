@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.db.database import get_db
 from app.db.models import DataAsset, Domain, Subdomain, AuditLog, SnowflakeConnection
-from app.schemas.asset import DataAssetCreate, DataAssetUpdate, DataAssetResponse, DataAssetCertifyRequest
+from app.schemas.asset import DataAssetCreate, DataAssetUpdate, DataAssetResponse, DataAssetCertifyRequest, DiscoveryRequest
 from app.core.security import get_current_user, get_domain_filter
 import uuid
 from datetime import datetime, timezone
@@ -271,6 +271,39 @@ async def get_asset_columns(asset_id: str, db: AsyncSession = Depends(get_db)):
     except Exception as e:
         logger.warning("Failed to fetch columns for asset %s: %s", asset_id, e)
         return {**base, "columns": [], "error": str(e)}
+
+
+@router.post("/discovery", status_code=202)
+async def start_discovery(
+    payload: DiscoveryRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    """Kick off an auto-discovery job. Returns job_id immediately; client polls GET /assets/discovery/jobs/{job_id}."""
+    from app.services import job_tracker
+    from app.services.discovery_service import run_discovery
+
+    job_data = payload.model_dump()
+    job_data["triggered_by"] = user.get("email")
+
+    job_id = job_tracker.create_job(
+        job_type="auto_discovery",
+        total=len(payload.selections),
+        meta={"connection_id": payload.connection_id, "triggered_by": user.get("email")},
+    )
+    background_tasks.add_task(run_discovery, job_id, job_data)
+    return {"job_id": job_id, "status": "queued", "poll_url": f"/assets/discovery/jobs/{job_id}"}
+
+
+@router.get("/discovery/jobs/{job_id}")
+async def get_discovery_job(job_id: str, user: dict = Depends(get_current_user)):
+    """Poll for auto-discovery job status and per-table results."""
+    from app.services import job_tracker
+    job = job_tracker.get_job(job_id)
+    if not job:
+        raise HTTPException(404, "Discovery job not found or expired")
+    return job
 
 
 @router.post("/{asset_id}/certify", response_model=DataAssetResponse)

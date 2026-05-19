@@ -473,13 +473,23 @@ async def generate_sql(
 async def classify_table(
     table_name: str, columns: list[dict],
     provider_name: str | None, db: AsyncSession,
+    domain_names: list[str] | None = None,
 ) -> dict:
     col_info = "\n".join(
         f"- {c['column_name']} ({c.get('data_type', 'unknown')})" for c in columns
     )
     prompt = f"Table: {table_name}\nColumns:\n{col_info}"
     provider = await get_provider_from_db(provider_name, db)
-    raw = await provider.complete(prompt, _SYS_CLASSIFY, max_tokens=400)
+    if domain_names:
+        domain_list = ", ".join(domain_names)
+        sys_classify = (
+            "You are a data governance expert. Classify a Snowflake table into a business domain. "
+            f"Domains: {domain_list}. "
+            "Return ONLY valid JSON: {domain, subdomain, owner_suggestion, reason, suggested_rules}."
+        )
+    else:
+        sys_classify = _SYS_CLASSIFY
+    raw = await provider.complete(prompt, sys_classify, max_tokens=400)
     try:
         start, end = raw.find("{"), raw.rfind("}") + 1
         return json.loads(raw[start:end]) if start >= 0 else {}
