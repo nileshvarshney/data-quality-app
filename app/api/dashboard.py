@@ -701,6 +701,18 @@ async def domain_history(
     return {"domain_id": domain_id, "days": days, "history": trend}
 
 
+@router.get("/trend")
+async def global_trend(
+    days: int = Query(30, ge=7, le=90),
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    """Return quality trend for N days. Used by dashboard trend tab switcher."""
+    domain_scope = get_domain_filter(user)
+    trend = await _build_trend(db, days=days, domain_id=domain_scope)
+    return {"days": days, "trend": trend}
+
+
 @router.get("/sla-breaches")
 async def sla_breaches(
     db: AsyncSession = Depends(get_db),
