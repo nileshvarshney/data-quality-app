@@ -703,3 +703,47 @@ async def generate_column_docs(
             skipped += 1
     await db.commit()
     return {"asset_id": asset_id, "documented": documented, "skipped": skipped}
+
+
+async def suggest_glossary_terms(
+    domain_id: str | None,
+    provider_name: str | None,
+    db: AsyncSession,
+) -> list[dict]:
+    """Suggest new glossary terms based on asset names and existing glossary."""
+    from app.db.models import GlossaryTerm
+    import json as _j
+
+    existing_res = await db.execute(select(GlossaryTerm.term_name).limit(100))
+    existing = {r for r in existing_res.scalars().all()}
+
+    asset_q = select(DataAsset, Domain).join(Domain, DataAsset.domain_id == Domain.domain_id)
+    if domain_id:
+        asset_q = asset_q.where(DataAsset.domain_id == domain_id)
+    asset_res = await db.execute(asset_q.limit(30))
+    asset_rows = asset_res.all()
+
+    asset_lines = [
+        f"- {r.DataAsset.sf_table_name} (domain: {r.Domain.domain_name})"
+        for r in asset_rows
+    ]
+    existing_text = ", ".join(sorted(existing)[:30]) if existing else "None"
+
+    sys_glossary = (
+        "You are a data governance expert. Suggest 5-8 new business glossary terms based on "
+        "the data asset names provided. Return ONLY a JSON array: "
+        '[{"term_name": "...", "definition": "...", "domain": "...", "examples": "..."}]'
+    )
+    prompt = (
+        "Data assets:\n" + "\n".join(asset_lines) +
+        f"\n\nExisting glossary terms (do not duplicate): {existing_text}\n\n"
+        "Suggest new terms for the business glossary."
+    )
+
+    provider = await get_provider_from_db(provider_name, db)
+    raw = await provider.complete(prompt, sys_glossary, max_tokens=1000)
+    try:
+        start = raw.find("["); end = raw.rfind("]") + 1
+        return _j.loads(raw[start:end]) if start >= 0 else []
+    except Exception:
+        return []

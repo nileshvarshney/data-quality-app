@@ -544,6 +544,24 @@ async def generate_column_docs(
         raise _llm_err(e)
 
 
+@router.post("/glossary/suggest-terms")
+@limiter.limit("10/minute")
+async def suggest_glossary_terms(
+    request: Request,
+    payload: dict = {},
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Suggest new business glossary terms based on registered data assets."""
+    try:
+        terms = await ai_service.suggest_glossary_terms(
+            payload.get("domain_id"), payload.get("provider"), db
+        )
+        return {"suggestions": terms, "count": len(terms)}
+    except RuntimeError as e:
+        raise _llm_err(e)
+
+
 @router.post("/incidents/{incident_id}/generate-postmortem")
 async def generate_postmortem(
     incident_id: str,
