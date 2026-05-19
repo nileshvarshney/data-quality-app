@@ -7,6 +7,7 @@ import {
   ChevronRight, RefreshCw, Play, AlertTriangle, Loader2,
   FileText, Bot, Database,
   Columns, Star, Tag, BookOpen, Zap, Pencil, EyeOff, TrendingUp, GitFork, GitCompare,
+  Sparkles, Wrench, X,
 } from 'lucide-react'
 import { dashboardApi, executionsApi, aiApi, assetsApi, glossaryApi } from '@/services/apiClient'
 import { profilingApi } from '@/services/profilingApi'
@@ -216,6 +217,14 @@ export default function TableDashboardPage() {
 
   const [glossaryTerms, setGlossaryTerms] = useState<any[]>([])
 
+  // AI feature state
+  const [descLoading,      setDescLoading]      = useState(false)
+  const [descText,         setDescText]          = useState<string | null>(null)
+  const [colDocsLoading,   setColDocsLoading]    = useState(false)
+  const [colDocsResult,    setColDocsResult]     = useState<{documented:number,skipped:number}|null>(null)
+  const [remediationLoading, setRemediationLoading] = useState(false)
+  const [remediationPlan,    setRemediationPlan]    = useState<any | null>(null)
+
   const tableLastProfiledAt = useMemo(
     () => columns
       .map((c: any) => c.last_profiled_at)
@@ -270,6 +279,38 @@ export default function TableDashboardPage() {
         certified_at: res.data.certified_at,
       }))
     } finally { setCertifying(false) }
+  }
+
+  const handleGenerateDescription = async () => {
+    setDescLoading(true)
+    try {
+      const res = await aiApi.generateDescription(assetId)
+      setDescText(res.data.description)
+      // also refresh data so header reflects updated description
+      await loadAll(true)
+    } catch { setDescText(null) }
+    finally { setDescLoading(false) }
+  }
+
+  const handleGenerateColumnDocs = async () => {
+    setColDocsLoading(true)
+    try {
+      const res = await aiApi.generateColumnDocs(assetId)
+      setColDocsResult(res.data)
+      // refresh schema columns to show new descriptions
+      setColFetched(false)
+    } catch { setColDocsResult(null) }
+    finally { setColDocsLoading(false) }
+  }
+
+  const handleRemediationPlan = async () => {
+    setRemediationLoading(true)
+    setRemediationPlan(null)
+    try {
+      const res = await aiApi.remediationPlan(assetId)
+      setRemediationPlan(res.data)
+    } catch { setRemediationPlan(null) }
+    finally { setRemediationLoading(false) }
   }
 
   const triggerProfiling = async () => {
@@ -371,6 +412,18 @@ export default function TableDashboardPage() {
         </div>
         <div className="flex items-center gap-2.5 flex-wrap">
           <div className="flex items-center gap-1.5 text-xs text-gray-400"><Clock size={12} />Updated {refreshedAt}</div>
+          <button onClick={handleGenerateDescription} disabled={descLoading}
+            title="Generate AI business description for this table"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-violet-700 bg-violet-50 border border-violet-200 rounded-lg hover:bg-violet-100 disabled:opacity-40 transition-all">
+            {descLoading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+            {descLoading ? 'Generating…' : 'Generate Description'}
+          </button>
+          <button onClick={handleRemediationPlan} disabled={remediationLoading}
+            title="Get AI remediation plan for recent failures"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-orange-700 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 disabled:opacity-40 transition-all">
+            {remediationLoading ? <Loader2 size={12} className="animate-spin" /> : <Wrench size={12} />}
+            {remediationLoading ? 'Analysing…' : 'Remediation Plan'}
+          </button>
           <Link href={`/runs?asset_id=${assetId}`}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:border-blue-300 hover:text-blue-600 transition-all">
             View Logs
@@ -417,6 +470,58 @@ export default function TableDashboardPage() {
 
       {/* ── Quality tab ─────────────────────────────────────────── */}
       {activeTab === 'quality' && <>
+
+      {/* AI-generated description banner */}
+      {descText && (
+        <div className="flex items-start gap-3 bg-violet-50 border border-violet-200 rounded-xl px-4 py-3">
+          <Sparkles size={15} className="text-violet-500 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-violet-700 mb-0.5">AI-Generated Description</p>
+            <p className="text-sm text-violet-900">{descText}</p>
+          </div>
+          <button onClick={() => setDescText(null)} className="text-violet-400 hover:text-violet-600 shrink-0">
+            <X size={13} />
+          </button>
+        </div>
+      )}
+
+      {/* Remediation plan panel */}
+      {remediationPlan && (
+        <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Wrench size={14} className="text-orange-600" />
+              <span className="text-sm font-semibold text-orange-800">AI Remediation Plan</span>
+            </div>
+            <button onClick={() => setRemediationPlan(null)} className="text-orange-400 hover:text-orange-600">
+              <X size={13} />
+            </button>
+          </div>
+          {remediationPlan.summary && (
+            <p className="text-xs text-orange-700 mb-3 leading-relaxed">{remediationPlan.summary}</p>
+          )}
+          {remediationPlan.steps?.length > 0 ? (
+            <div className="space-y-2">
+              {remediationPlan.steps.map((step: any, i: number) => (
+                <div key={i} className="bg-white rounded-lg border border-orange-100 px-3 py-2.5 flex items-start gap-3">
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 mt-0.5 ${
+                    step.priority === 'critical' ? 'bg-red-100 text-red-700' :
+                    step.priority === 'high'     ? 'bg-orange-100 text-orange-700' :
+                    step.priority === 'medium'   ? 'bg-yellow-100 text-yellow-700' :
+                                                   'bg-gray-100 text-gray-600'
+                  }`}>{(step.priority || 'medium').toUpperCase()}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-gray-800">{step.action}</p>
+                    {step.owner_role && <p className="text-[11px] text-gray-500 mt-0.5">Owner: {step.owner_role} · {step.estimated_effort}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-orange-600 italic">{remediationPlan.summary || 'No recent failures — asset appears healthy.'}</p>
+          )}
+        </div>
+      )}
 
       {/* Hero: score ring + KPIs */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
@@ -629,6 +734,18 @@ export default function TableDashboardPage() {
               )}
             </div>
             <div className="flex items-center gap-2">
+              {/* Generate Column Docs button */}
+              <button onClick={handleGenerateColumnDocs} disabled={colDocsLoading}
+                title="Generate AI descriptions for all columns"
+                className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium text-violet-700 bg-violet-50 border border-violet-200 rounded-lg hover:bg-violet-100 disabled:opacity-40 transition-all">
+                {colDocsLoading ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
+                {colDocsLoading ? 'Documenting…' : 'Generate Column Docs'}
+              </button>
+              {colDocsResult && (
+                <span className="text-[11px] text-green-600 font-medium">
+                  ✓ {colDocsResult.documented} documented
+                </span>
+              )}
               {profilingStatus === 'done' && (
                 <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
                   <CheckCircle size={11} /> Profiled

@@ -207,6 +207,9 @@ export const aiApi = {
   classifyTable: (data: object) => api.post('/ai/classify-table', data),
   chat: (data: object) => api.post('/ai/chat', data),
   rulesFromNL: (data: object) => api.post('/ai/rules/from-natural-language', data),
+  generateDescription: (assetId: string) => api.post(`/ai/assets/${assetId}/generate-description`, {}),
+  generateColumnDocs: (assetId: string) => api.post(`/ai/assets/${assetId}/generate-column-docs`, {}),
+  remediationPlan: (assetId: string) => api.post(`/ai/assets/${assetId}/remediation-plan`, {}),
 }
 
 // Alerts
