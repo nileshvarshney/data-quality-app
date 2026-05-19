@@ -272,6 +272,53 @@ export default function DomainDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* ── ROW 2: Quality Trend + Quality Dimensions ──────────────────── */}
+      <div className="grid px-3 pb-1.5 gap-3 shrink-0" style={{ gridTemplateColumns: '1fr 1.2fr', minHeight: '160px' }}>
+
+        <div className="rounded-lg p-3 flex flex-col" style={card}>
+          <div className="flex items-center justify-between mb-2 shrink-0">
+            <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Quality Trend</span>
+            <div className="flex gap-0.5 rounded p-0.5" style={{ background: 'var(--surface-sub)' }}>
+              {([7, 14, 30, 90] as TrendDays[]).map(d => (
+                <button key={d} onClick={() => setTrendDays(d)}
+                  className="text-[9px] font-semibold px-1.5 py-0.5 rounded transition-colors"
+                  style={trendDays === d ? { background: '#6366f1', color: '#fff' } : { color: 'var(--text-3)' }}>
+                  {d}d
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex-1 min-h-0">
+            <QualityTrendChart data={trendData.length ? trendData : (data.quality_trend ?? [])} height={100} area />
+          </div>
+        </div>
+
+        <div className="rounded-lg p-3 flex flex-col" style={card}>
+          <span className="text-[10px] font-semibold uppercase tracking-wider mb-2 shrink-0" style={{ color: 'var(--text-3)' }}>Quality Dimensions</span>
+          <div className="grid flex-1 gap-2" style={{ gridTemplateColumns: 'repeat(5,1fr)' }}>
+            {DIMENSIONS.map(({ key, label, icon, cssClass }) => {
+              const val = dimensions?.[key] ?? null
+              const color = val !== null ? scoreColor(val) : 'var(--text-4)'
+              return (
+                <div key={key}
+                  title={`${label}: ${val !== null ? `${val.toFixed(1)}%` : 'No data'} — based on today's rule executions`}
+                  className={`${cssClass} rounded-lg flex flex-col items-center justify-between p-2 cursor-help`}
+                  style={{ borderWidth: '1px', borderStyle: 'solid', minHeight: 0 }}>
+                  <span className="text-base leading-none">{icon}</span>
+                  <span className="text-[9px] uppercase tracking-wide text-center font-medium whitespace-nowrap overflow-hidden text-ellipsis w-full"
+                    style={{ color: 'var(--text-3)' }}>
+                    {label}
+                  </span>
+                  <span className="text-lg font-black leading-none tabular-nums" style={{ color }}>
+                    {val !== null ? `${val.toFixed(0)}%` : '—'}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
