@@ -1,561 +1,186 @@
 'use client'
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useRef, useCallback, useMemo } from 'react'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
-import {
-  Globe, Database, Shield, Calendar, Bell, ClipboardList, ClipboardCheck,
-  PlayCircle, Settings, FolderKanban, LogOut, User, Sun, Moon,
-  BrainCircuit, HelpCircle, Search, BookOpen, Package, FileText, Sparkles,
-  AlertOctagon, ShoppingBag, BarChart2, ChevronDown,
-  PanelLeftClose, PanelLeftOpen, Zap, Lock, Trash2,
-  Layers, Gavel, Cpu,
-} from 'lucide-react'
+import { usePathname } from 'next/navigation'
+import { HelpCircle } from 'lucide-react'
 import clsx from 'clsx'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
-import { useTheme } from './ThemeProvider'
+import { NAV, type NavSection } from './nav-config'
 
-// ── Types ──────────────────────────────────────────────────────────────────────
-
-interface NavItem {
-  href: string
-  label: string
-  icon: React.ElementType
-  badgeKey?: string
-  /** If set, clicking fires this action instead of navigating */
-  action?: () => void
+interface SidebarProps {
+  badges: Record<string, number>
+  openSection: string | null
+  onSectionChange: (id: string | null) => void
 }
 
-interface NavSection {
-  id: string
-  label: string
-  icon: React.ElementType
-  items: NavItem[]
-  adminOnly?: boolean
-}
-
-// ── Navigation structure ───────────────────────────────────────────────────────
-
-const NAV: NavSection[] = [
-  {
-    id: 'overview',
-    label: 'Overview',
-    icon: Globe,
-    items: [
-      { href: '/dashboard/global', label: 'Global Dashboard',       icon: Globe },
-      { href: '/executive',        label: 'Cost Impact Dashboard',  icon: BarChart2 },
-    ],
-  },
-  {
-    id: 'quality',
-    label: 'Data Quality',
-    icon: Shield,
-    items: [
-      { href: '/rules',          label: 'Rules',          icon: Shield,          badgeKey: 'pending_rules' },
-      { href: '/rules/approval-queue', label: 'Approval Queue', icon: ClipboardCheck },
-      { href: '/assets',         label: 'Data Assets',    icon: Database },
-      { href: '/schedules', label: 'Schedules',      icon: Calendar },
-      { href: '/runs',      label: 'Execution Logs', icon: PlayCircle },
-    ],
-  },
-  {
-    id: 'operations',
-    label: 'Operations',
-    icon: Bell,
-    items: [
-      { href: '/alerts', label: 'Alerts',     icon: Bell,          badgeKey: 'open_alerts' },
-      { href: '/audit',  label: 'Audit Logs', icon: ClipboardList },
-    ],
-  },
-  {
-    id: 'catalog',
-    label: 'Data Catalog',
-    icon: Search,
-    items: [
-      { href: '/catalog',       label: 'Data Catalog',  icon: Search },
-      { href: '/glossary',      label: 'Glossary',      icon: BookOpen },
-      { href: '/data-products', label: 'Data Products', icon: Package },
-    ],
-  },
-  {
-    id: 'governance',
-    label: 'Governance',
-    icon: Gavel,
-    items: [
-      { href: '/governance',  label: 'Governance Hub',   icon: Layers },
-      { href: '/contracts',   label: 'Data Contracts',   icon: FileText },
-      { href: '/incidents',   label: 'Incidents',        icon: AlertOctagon, badgeKey: 'open_incidents' },
-      { href: '/marketplace', label: 'Rule Marketplace', icon: ShoppingBag },
-    ],
-  },
-  {
-    id: 'privacy',
-    label: 'Privacy & Compliance',
-    icon: Lock,
-    items: [
-      { href: '/compliance',  label: 'Compliance',       icon: Shield },
-    ],
-  },
-  {
-    id: 'ai',
-    label: 'AI Intelligence',
-    icon: Cpu,
-    items: [
-      {
-        href: '#copilot',
-        label: 'AI Copilot',
-        icon: Sparkles,
-        action: () => window.dispatchEvent(new CustomEvent('open-ai-copilot')),
-      },
-      { href: '/ai-assistant', label: 'AI Assistant', icon: BrainCircuit },
-    ],
-  },
-  {
-    id: 'support',
-    label: 'Support',
-    icon: HelpCircle,
-    items: [
-      { href: '/help', label: 'Help & Reference', icon: HelpCircle },
-    ],
-  },
-  {
-    id: 'admin',
-    label: 'Administration',
-    icon: Settings,
-    adminOnly: true,
-    items: [
-      { href: '/admin/domains',  label: 'Domain Management', icon: FolderKanban },
-      { href: '/admin/users',    label: 'User Management',   icon: User },
-      { href: '/admin/cleanup',  label: 'Data Cleanup',      icon: Trash2 },
-      { href: '/settings',       label: 'Settings',          icon: Settings },
-    ],
-  },
-]
-
-const ROLE_CONFIG: Record<string, { label: string; color: string }> = {
-  admin:        { label: 'Admin',        color: 'bg-red-100 text-red-700' },
-  domain_owner: { label: 'Domain Owner', color: 'bg-purple-100 text-purple-700' },
-  data_owner:   { label: 'Data Owner',   color: 'bg-blue-100 text-blue-700' },
-  viewer:       { label: 'Viewer',       color: 'bg-gray-100 text-gray-600' },
-  auditor:      { label: 'Auditor',      color: 'bg-amber-100 text-amber-700' },
-}
-
-const AVATAR_COLORS = [
-  'from-blue-500 to-indigo-600',
-  'from-purple-500 to-pink-600',
-  'from-emerald-500 to-teal-600',
-  'from-orange-500 to-red-600',
-  'from-cyan-500 to-blue-600',
-]
-
-function getAvatarColor(name: string): string {
-  const idx = name.charCodeAt(0) % AVATAR_COLORS.length
-  return AVATAR_COLORS[idx]
-}
-
-function getInitials(name: string): string {
-  return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
-}
-
-// ── Sidebar storage keys ───────────────────────────────────────────────────────
-
-const KEY_COLLAPSED = 'dg-sidebar-collapsed'
-const KEY_SECTIONS  = 'dg-sidebar-sections'
-const KEY_COMPACT   = 'dg-sidebar-compact'
-
-// ── Main component ─────────────────────────────────────────────────────────────
-
-export default function Sidebar() {
+export default function Sidebar({ badges, openSection, onSectionChange }: SidebarProps) {
   const pathname = usePathname()
-  const router   = useRouter()
-  const user     = useCurrentUser()
-  const { theme, toggle } = useTheme()
-
-  // Sidebar-wide compact (icon-only) mode
-  const [compact, setCompact]           = useState(false)
-  // Per-section collapsed state
-  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
-  // Live badge counts
-  const [badges, setBadges]             = useState<Record<string, number>>({})
-  // Environment label
-  const env = (process.env.NEXT_PUBLIC_APP_ENV || 'local').toUpperCase()
-
-  // ── Persist & restore ──────────────────────────────────────────────────────
-
-  useEffect(() => {
-    try {
-      setCompact(localStorage.getItem(KEY_COMPACT) === 'true')
-      const raw = localStorage.getItem(KEY_SECTIONS)
-      if (raw) setCollapsedSections(new Set(JSON.parse(raw)))
-    } catch {}
-  }, [])
-
-  const toggleCompact = useCallback(() => {
-    setCompact(prev => {
-      const next = !prev
-      try { localStorage.setItem(KEY_COMPACT, String(next)) } catch {}
-      return next
-    })
-  }, [])
-
-  const toggleSection = useCallback((id: string) => {
-    setCollapsedSections(prev => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      try { localStorage.setItem(KEY_SECTIONS, JSON.stringify([...next])) } catch {}
-      return next
-    })
-  }, [])
-
-  // ── Live badge counts — fetched with AbortController, 90-s poll ─────────────
-
-  const loadBadges = useCallback(async (signal?: AbortSignal) => {
-    try {
-      const API    = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      const token  = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null
-      if (!token) return                                    // skip if not authenticated
-      const headers: Record<string, string> = { Authorization: `Bearer ${token}` }
-      const opts = { headers, signal }
-
-      // Single dashboard/summary call is cheaper than 3 individual list calls
-      const res = await fetch(`${API}/dashboard/global`, opts)
-      if (!res.ok) return
-      const data = await res.json()
-
-      setBadges({
-        open_alerts:    data.open_alerts     ?? 0,
-        pending_rules:  0,                               // no single field; keep 0
-        open_incidents: 0,
-      })
-    } catch (e: any) {
-      if (e?.name === 'AbortError') return               // ignore cancellation
-    }
-  }, [])
-
-  useEffect(() => {
-    const ctrl = new AbortController()
-    loadBadges(ctrl.signal)
-    const iv = setInterval(() => loadBadges(ctrl.signal), 90_000)  // 90s — halved API load
-    return () => { ctrl.abort(); clearInterval(iv) }
-  }, [loadBadges])
-
-  // ── Auth ───────────────────────────────────────────────────────────────────
-
-  const handleLogout = () => {
-    localStorage.removeItem('access_token')
-    localStorage.removeItem('refresh_token')
-    router.push('/login')
-  }
+  const user = useCurrentUser()
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const visibleSections = useMemo(
-    () => NAV.filter(s => s.adminOnly ? user?.role === 'admin' : true),
+    () => NAV.filter(s => !s.adminOnly || user?.role === 'admin'),
     [user?.role]
   )
 
-  // ── Derived (memoized) ─────────────────────────────────────────────────────
+  const activeSectionId = useMemo(() => {
+    for (const s of visibleSections) {
+      if (s.items.some(item => !item.action && (pathname === item.href || pathname.startsWith(item.href + '/')))) {
+        return s.id
+      }
+    }
+    return null
+  }, [pathname, visibleSections])
 
-  const totalBadges    = useMemo(() => Object.values(badges).reduce((a, b) => a + b, 0), [badges])
-  const avatarGradient = useMemo(() => user ? getAvatarColor(user.full_name) : AVATAR_COLORS[0], [user?.full_name])
-  const initials       = useMemo(() => user ? getInitials(user.full_name) : '??', [user?.full_name])
-  const roleConfig     = useMemo(
-    () => user ? (ROLE_CONFIG[user.role] ?? { label: user.role, color: 'bg-gray-100 text-gray-600' }) : null,
-    [user?.role]
-  )
+  const flyoutSection: NavSection | null =
+    visibleSections.find(s => s.id === openSection) ?? null
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  const mainSections = visibleSections.filter(s => s.id !== 'support')
+  const supportSection = visibleSections.find(s => s.id === 'support') ?? null
+  const FlyoutSectionIcon = flyoutSection?.icon ?? null
+
+  // ── Mouseleave auto-hide (150ms delay prevents flicker) ──────────────────
+
+  const cancelClose = useCallback(() => {
+    if (closeTimer.current) { clearTimeout(closeTimer.current); closeTimer.current = null }
+  }, [])
+
+  const scheduleClose = useCallback(() => {
+    closeTimer.current = setTimeout(() => onSectionChange(null), 150)
+  }, [onSectionChange])
+
+  const handleIconClick = useCallback((sectionId: string) => {
+    cancelClose()
+    onSectionChange(openSection === sectionId ? null : sectionId)
+  }, [openSection, onSectionChange, cancelClose])
+
+  // ── Icon button renderer ──────────────────────────────────────────────────
+
+  const renderIconBtn = (section: NavSection) => {
+    const Icon = section.icon
+    const isActive = activeSectionId === section.id
+    const isOpen   = openSection === section.id
+    const sectionBadge = section.items.reduce(
+      (sum, item) => sum + (item.badgeKey ? (badges[item.badgeKey] ?? 0) : 0), 0
+    )
+    return (
+      <button
+        key={section.id}
+        onClick={() => handleIconClick(section.id)}
+        title={section.label}
+        className={clsx(
+          'relative w-12 h-12 rounded-xl flex items-center justify-center transition-colors',
+          (isActive || isOpen)
+            ? '[background-color:var(--sidebar-active-bg)] [color:var(--sidebar-active-text)]'
+            : 'hover:[background-color:var(--sidebar-hover)]'
+        )}
+        style={!(isActive || isOpen) ? { color: 'var(--sidebar-icon-color)' } : undefined}
+      >
+        <Icon size={20} />
+        {sectionBadge > 0 && (
+          <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500" />
+        )}
+      </button>
+    )
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <aside className={clsx(
-      'sidebar flex flex-col',
-      'transition-[width] duration-300 ease-in-out',
-      compact ? 'sidebar--compact' : ''
-    )}>
-
-      {/* ── Brand header ── */}
-      <div
-        className="shrink-0"
-        style={{ background: 'var(--sidebar-header-bg)', borderBottom: '1px solid var(--sidebar-header-border)' }}
-      >
-        {compact ? (
-          /* ── Compact: centred logo + expand button ── */
-          <div className="flex flex-col items-center gap-2 py-4">
-            <div className="w-8 h-8 rounded-lg overflow-hidden bg-[#0f172a]">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo-icon.svg" alt="DG" width={32} height={32} className="w-full h-full" />
-            </div>
+    <div
+      className="sidebar-nav-zone"
+      onMouseLeave={scheduleClose}
+      onMouseEnter={cancelClose}
+    >
+      {/* 64px icon strip */}
+      <aside className="icon-sidebar">
+        <div className="flex flex-col items-center gap-1 py-2 flex-1">
+          {mainSections.map(renderIconBtn)}
+        </div>
+        {/* Support pinned at bottom */}
+        {supportSection && (
+          <div className="pb-3 flex flex-col items-center">
             <button
-              onClick={toggleCompact}
-              title="Expand sidebar"
-              className="p-1.5 rounded-lg transition-colors [color:var(--sidebar-subtle)] hover:[background-color:var(--sidebar-hover)] hover:[color:var(--sidebar-text)]"
-            >
-              <PanelLeftOpen size={14} />
-            </button>
-          </div>
-        ) : (
-          /* ── Expanded: full brand block ── */
-          <div className="px-3.5 pt-3.5 pb-3">
-
-            {/* Row 1: logo + wordmark + collapse */}
-            <div className="flex items-center gap-2.5">
-              <Link href="/dashboard/global" className="flex items-center gap-2.5 flex-1 min-w-0">
-                <div className="shrink-0 w-8 h-8 rounded-lg overflow-hidden bg-[#0f172a] flex items-center justify-center">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src="/logo-icon.svg"
-                    alt="DataGuardian"
-                    width={32} height={32}
-                    className="w-full h-full"
-                    style={{ imageRendering: 'crisp-edges' }}
-                  />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-extrabold leading-tight tracking-[-0.3px] whitespace-nowrap">
-                    <span style={{ color: 'var(--sidebar-text)' }}>Data</span>
-                    <span style={{ color: '#F59E0B' }}>Guardian</span>
-                  </p>
-                  <p className="text-[9px] font-medium mt-0.5 tracking-[.05em] uppercase truncate"
-                     style={{ color: 'var(--sidebar-subtle)' }}>
-                    Data Quality &amp; Governance
-                  </p>
-                </div>
-              </Link>
-              <button
-                onClick={toggleCompact}
-                title="Collapse sidebar"
-                className="shrink-0 p-1 rounded-md transition-colors [color:var(--sidebar-subtle)] hover:[background-color:var(--sidebar-hover)] hover:[color:var(--sidebar-text)]"
-              >
-                <PanelLeftClose size={13} />
-              </button>
-            </div>
-
-            {/* Row 2: quick search */}
-            <button
-              onClick={() => window.dispatchEvent(
-                new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true })
+              onClick={() => handleIconClick(supportSection.id)}
+              title={supportSection.label}
+              className={clsx(
+                'relative w-12 h-12 rounded-xl flex items-center justify-center transition-colors',
+                openSection === supportSection.id
+                  ? '[background-color:var(--sidebar-active-bg)] [color:var(--sidebar-active-text)]'
+                  : 'hover:[background-color:var(--sidebar-hover)]'
               )}
-              className="mt-2.5 w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10.5px] transition-colors border [background-color:var(--sidebar-hover)] [border-color:var(--sidebar-divider)] [color:var(--sidebar-subtle)] hover:[color:var(--sidebar-text)]"
+              style={openSection !== supportSection.id ? { color: 'var(--sidebar-icon-color)' } : undefined}
             >
-              <Search size={11} />
-              <span className="flex-1 text-left">Quick search…</span>
-              <kbd className="text-[9px] font-mono border px-1 py-0.5 rounded opacity-50 [background-color:var(--sidebar-header-bg)] [border-color:var(--sidebar-divider)]">⌘K</kbd>
+              <HelpCircle size={20} />
             </button>
-
-            {/* Row 3: version + live alert dot */}
-            <div className="flex items-center mt-2 px-0.5">
-              <span className="text-[9px] opacity-50" style={{ color: 'var(--sidebar-subtle)' }}>v0.1</span>
-              {totalBadges > 0 && (
-                <span className="ml-auto flex items-center gap-1 text-[9px] font-bold text-red-500">
-                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0" />
-                  {totalBadges} active
-                </span>
-              )}
-            </div>
-
           </div>
         )}
-      </div>
+      </aside>
 
-      {/* ── Nav ── */}
-      <nav className="flex-1 overflow-y-auto py-2 scrollbar-thin">
-        {visibleSections.map(section => {
-          const isCollapsed = collapsedSections.has(section.id)
+      {/* Overlay flyout panel */}
+      {flyoutSection && FlyoutSectionIcon && (
+        <div className="flyout-panel">
+          <div className="flyout-header">
+            <FlyoutSectionIcon
+              size={13}
+              style={{ color: 'var(--sidebar-active-text)', flexShrink: 0 }}
+            />
+            <span
+              className="text-[12px] font-bold truncate"
+              style={{ color: 'var(--sidebar-text)' }}
+            >
+              {flyoutSection.label}
+            </span>
+          </div>
+          <div className="flyout-items">
+            {flyoutSection.items.map(({ href, label, icon: Icon, badgeKey, action }) => {
+              const isActive = !action && (pathname === href || pathname.startsWith(href + '/'))
+              const badgeCount = badgeKey ? (badges[badgeKey] ?? 0) : 0
 
-          // Section-level badge: sum of all item badges
-          const sectionBadge = section.items.reduce((sum, item) =>
-            sum + (item.badgeKey ? (badges[item.badgeKey] ?? 0) : 0), 0
-          )
+              const cls = clsx(
+                'flex items-center gap-2 px-2.5 py-2 rounded-[10px] text-[12px] transition-colors w-full text-left',
+                isActive
+                  ? '[background-color:var(--sidebar-active-bg)] [color:var(--sidebar-active-text)] font-semibold'
+                  : 'hover:[background-color:var(--sidebar-hover)] hover:[color:var(--sidebar-text)]'
+              )
+              const itemStyle = !isActive ? { color: 'var(--sidebar-muted)' } : undefined
 
-          return (
-            <div key={section.id} className={clsx(compact && 'px-1')}>
-
-              {/* Section header */}
-              {!compact ? (
-                <button
-                  onClick={() => toggleSection(section.id)}
-                  title={isCollapsed ? `Expand ${section.label}` : `Collapse ${section.label}`}
-                  className={clsx(
-                    'w-full flex items-center gap-2 px-3.5 pt-2.5 pb-1 transition-opacity',
-                    isCollapsed && 'opacity-60'
-                  )}
-                >
-                  <span
-                    className="text-[9.5px] font-bold tracking-[.08em] uppercase shrink-0"
-                    style={{ color: 'var(--sidebar-subtle)' }}
-                  >
-                    {section.label}
-                  </span>
-                  <span className="flex-1 h-px" style={{ background: 'var(--sidebar-divider)' }} />
-                  {sectionBadge > 0 && (
-                    <span className="text-[9px] font-bold px-1.5 h-4 flex items-center rounded-full bg-red-500 text-white ml-1">
-                      {sectionBadge}
+              const inner = (
+                <>
+                  <Icon size={13} className="shrink-0" />
+                  <span className="flex-1 truncate">{label}</span>
+                  {badgeCount > 0 && (
+                    <span className="text-[9px] font-bold min-w-[16px] h-4 flex items-center justify-center rounded-full px-1 bg-red-500 text-white shrink-0">
+                      {badgeCount > 99 ? '99+' : badgeCount}
                     </span>
                   )}
-                  <ChevronDown
-                    size={10}
-                    className={clsx('shrink-0 ml-0.5 transition-transform duration-200', isCollapsed && '-rotate-90')}
-                    style={{ color: 'var(--sidebar-subtle)', opacity: 0.5 }}
-                  />
+                </>
+              )
+
+              return action ? (
+                <button
+                  key={href}
+                  onClick={() => { action(); onSectionChange(null) }}
+                  className={cls}
+                  style={itemStyle}
+                >
+                  {inner}
                 </button>
               ) : (
-                /* Compact: thin divider between sections */
-                <div className="my-1 mx-2 h-px" style={{ backgroundColor: 'var(--sidebar-border)' }} />
-              )}
-
-              {/* Section items */}
-              {!isCollapsed && (
-                <div className={clsx('space-y-px', !compact && 'mt-0.5')}>
-                  {section.items.map(({ href, label, icon: Icon, badgeKey, action }) => {
-                    const active = !action && (pathname === href || pathname.startsWith(href + '/'))
-                    const badgeCount = badgeKey ? (badges[badgeKey] ?? 0) : 0
-
-                    const itemCls = clsx(
-                      'flex items-center gap-2 rounded-[7px] text-[11.5px] transition-all cursor-pointer',
-                      compact ? 'justify-center p-2 mx-auto' : 'px-2.5 py-1.5 mx-1',
-                      active
-                        ? '[background-color:var(--sidebar-active-bg)] [color:var(--sidebar-active-text)] font-semibold'
-                        : '[color:var(--sidebar-muted)] hover:[background-color:var(--sidebar-hover)] hover:[color:var(--sidebar-text)]'
-                    )
-
-                    const inner = (
-                      <>
-                        {/* Fixed-width icon slot — keeps all labels left-aligned */}
-                        <span className="w-[14px] flex items-center justify-center shrink-0">
-                          <Icon size={13} />
-                        </span>
-                        {!compact && (
-                          <>
-                            <span className="flex-1 truncate">{label}</span>
-                            {badgeCount > 0 && (
-                              <span className="text-[9px] font-bold min-w-[16px] h-[16px] flex items-center justify-center rounded-full px-1 bg-red-500 text-white">
-                                {badgeCount > 99 ? '99+' : badgeCount}
-                              </span>
-                            )}
-                            {active && (
-                              <span
-                                className="w-[3px] h-4 rounded-full shrink-0"
-                                style={{ background: 'var(--sidebar-active-bar)' }}
-                              />
-                            )}
-                          </>
-                        )}
-                        {compact && badgeCount > 0 && (
-                          <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-red-500" />
-                        )}
-                      </>
-                    )
-
-                    return action ? (
-                      <button
-                        key={href}
-                        onClick={action}
-                        title={compact ? label : undefined}
-                        className={itemCls}
-                      >
-                        {inner}
-                      </button>
-                    ) : (
-                      <Link
-                        key={href}
-                        href={href}
-                        title={compact ? label : undefined}
-                        className={itemCls}
-                      >
-                        {inner}
-                      </Link>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          )
-        })}
-      </nav>
-
-      {/* ── Footer ── */}
-      <div
-        className="shrink-0 px-2 pb-2.5 pt-2 space-y-1.5"
-        style={{ borderTop: '1px solid var(--sidebar-header-border)', background: 'var(--sidebar-footer-bg)' }}
-      >
-        {/* User profile card with actions */}
-        {user && (
-          <div className={clsx(
-            'rounded-lg transition-colors border',
-            '[background-color:var(--sidebar-card-bg)] [border-color:var(--sidebar-card-border)]',
-            compact ? 'flex justify-center p-2' : 'flex items-center gap-2 p-1.5'
-          )}>
-            {/* Avatar */}
-            <div className={clsx(
-              `bg-gradient-to-br ${avatarGradient}`,
-              'rounded-[7px] flex items-center justify-center text-white font-bold shrink-0 w-7 h-7 text-[10px]'
-            )}>
-              {initials}
-            </div>
-
-            {!compact && (
-              <>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[11px] font-semibold truncate leading-tight"
-                     style={{ color: 'var(--sidebar-text)' }}>
-                    {user.full_name}
-                  </p>
-                  {roleConfig && (
-                    <span className={clsx(
-                      'inline-block text-[9px] font-semibold px-1.5 py-0.5 rounded-[3px] mt-0.5',
-                      roleConfig.color
-                    )}>
-                      {roleConfig.label}
-                    </span>
-                  )}
-                </div>
-
-                {/* Theme toggle + logout grouped */}
-                <div className="flex items-center gap-0.5 shrink-0">
-                  <button
-                    onClick={toggle}
-                    title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
-                    className="w-6 h-6 flex items-center justify-center rounded-md transition-colors [color:var(--sidebar-subtle)] hover:[background-color:var(--sidebar-hover)] hover:[color:var(--sidebar-text)]"
-                  >
-                    {theme === 'light'
-                      ? <Moon size={13} className="text-indigo-400" />
-                      : <Sun  size={13} className="text-yellow-400" />}
-                  </button>
-                  <button
-                    onClick={handleLogout}
-                    title="Sign out"
-                    className="w-6 h-6 flex items-center justify-center rounded-md transition-colors [color:var(--sidebar-subtle)] hover:text-red-500 hover:[background-color:var(--sidebar-hover)]"
-                  >
-                    <LogOut size={13} />
-                  </button>
-                </div>
-              </>
-            )}
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={() => onSectionChange(null)}
+                  className={cls}
+                  style={itemStyle}
+                >
+                  {inner}
+                </Link>
+              )
+            })}
           </div>
-        )}
-
-        {/* Compact: standalone theme toggle */}
-        {compact && (
-          <button
-            onClick={toggle}
-            title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
-            className="w-full flex justify-center p-2 rounded-lg transition-colors [color:var(--sidebar-subtle)] hover:[background-color:var(--sidebar-hover)] hover:[color:var(--sidebar-text)]"
-          >
-            {theme === 'light'
-              ? <Moon size={14} className="text-indigo-400" />
-              : <Sun  size={14} className="text-yellow-400" />}
-          </button>
-        )}
-
-        {/* Version line — very muted */}
-        {!compact && (
-          <p
-            className="text-[8.5px] px-1 flex items-center gap-1.5"
-            style={{ color: 'var(--sidebar-subtle)', opacity: 0.55 }}
-          >
-            <Zap size={8} />
-            DataGuardian v0.1
-            <span className="ml-auto">Decision Minds © 2026</span>
-          </p>
-        )}
-      </div>
-    </aside>
+        </div>
+      )}
+    </div>
   )
 }
