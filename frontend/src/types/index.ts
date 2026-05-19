@@ -77,6 +77,19 @@ export interface DQRuleRun {
   created_at: string
 }
 
+export interface DimensionScores {
+  completeness:  number | null
+  freshness:     number | null
+  consistency:   number | null
+  accuracy:      number | null
+  business_rule: number | null
+}
+
+export interface TrendResponse {
+  days:  number
+  trend: Array<{ date: string; score: number | null; total: number; passed: number }>
+}
+
 export interface GlobalDashboard {
   overall_quality_score: number
   total_domains: number

@@ -186,16 +186,18 @@ export const executionsApi = {
 
 // Dashboard
 export const dashboardApi = {
-  global: () => api.get('/dashboard/global'),
-  summary: () => api.get('/dashboard/summary'),
-  domains: () => api.get('/dashboard/domains'),
-  domain: (id: string) => api.get(`/dashboard/domains/${id}`),
-  subdomain: (id: string) => api.get(`/dashboard/subdomains/${id}`),
-  table: (id: string) => api.get(`/dashboard/tables/${id}`),
-  tableHistory: (id: string, days?: number) => api.get(`/dashboard/history/table/${id}`, { params: { days } }),
+  global:           () => api.get('/dashboard/global'),
+  summary:          () => api.get('/dashboard/summary'),
+  domains:          () => api.get('/dashboard/domains'),
+  domain:           (id: string) => api.get(`/dashboard/domains/${id}`),
+  subdomain:        (id: string) => api.get(`/dashboard/subdomains/${id}`),
+  table:            (id: string) => api.get(`/dashboard/tables/${id}`),
+  tableHistory:     (id: string, days?: number) => api.get(`/dashboard/history/table/${id}`, { params: { days } }),
   subdomainHistory: (id: string, days?: number) => api.get(`/dashboard/history/subdomain/${id}`, { params: { days } }),
-  domainHistory: (id: string, days?: number) => api.get(`/dashboard/history/domain/${id}`, { params: { days } }),
-  slaBreaches: () => api.get('/dashboard/sla-breaches'),
+  domainHistory:    (id: string, days?: number) => api.get(`/dashboard/history/domain/${id}`, { params: { days } }),
+  slaBreaches:      () => api.get('/dashboard/sla-breaches'),
+  trend:            (days: number) => api.get('/dashboard/trend', { params: { days } }),
+  dimensions:       () => api.get('/dashboard/dimensions'),
 }
 
 // AI
