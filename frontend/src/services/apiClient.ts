@@ -210,6 +210,9 @@ export const aiApi = {
   generateDescription: (assetId: string) => api.post(`/ai/assets/${assetId}/generate-description`, {}),
   generateColumnDocs: (assetId: string) => api.post(`/ai/assets/${assetId}/generate-column-docs`, {}),
   remediationPlan: (assetId: string) => api.post(`/ai/assets/${assetId}/remediation-plan`, {}),
+  governanceReviewQueue: () => api.get('/ai/governance/review-queue'),
+  suggestViolationResolution: (violationId: string) => api.post(`/ai/governance/violations/${violationId}/suggest-resolution`, {}),
+  governanceChat: (data: object) => api.post('/ai/chat/governance', data),
 }
 
 // Alerts

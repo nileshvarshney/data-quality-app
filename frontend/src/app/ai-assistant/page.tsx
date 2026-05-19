@@ -4,7 +4,7 @@ import { aiApi } from '@/services/apiClient'
 import {
   Send, Bot, User, AlertTriangle, RefreshCw, ExternalLink,
   CheckCircle, Loader2, Trash2, Zap, Copy, Check,
-  Download, RotateCcw, ChevronDown,
+  Download, RotateCcw, ChevronDown, Shield,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -298,6 +298,9 @@ const EXAMPLE_GROUPS = [
 
 const STORAGE_KEY = 'dq_ai_chat_history_v2'
 const INPUT_MAX = 2000
+
+type ChatMode = 'general' | 'governance'
+
 const WELCOME: Message = {
   role: 'assistant',
   content: `### Welcome to DataGuardian AI
@@ -316,6 +319,53 @@ I'm your AI expert for DataGuardian. I have live access to your platform data an
 Ask me anything — I answer from **live platform data**, not general knowledge.`,
 }
 
+const GOVERNANCE_WELCOME: Message = {
+  role: 'assistant',
+  content: `### Governance Advisor
+
+I'm your **DQ Governance Advisor** — focused on helping your governance and stewardship teams.
+
+I have live access to:
+
+- 🔴 **Open policy violations** — what's breached, severity, and recommended actions
+- 📋 **Pending rule approvals** — rules awaiting steward review
+- 🏛️ **Active policies** — what governance rules are enforced
+- ✅ **Certification status** — uncertified assets and coverage gaps
+
+Ask me to:
+- Prioritise today's violations by business impact
+- Explain a specific policy and what it checks
+- Recommend next steps to improve your governance scorecard
+- Draft a resolution note for a violation`,
+}
+
+const GOVERNANCE_EXAMPLE_GROUPS = [
+  {
+    label: 'Violations',
+    prompts: [
+      'Which violations are most critical today?',
+      'What has been open the longest?',
+      'How many violations are there by severity?',
+    ],
+  },
+  {
+    label: 'Approvals',
+    prompts: [
+      'What rules are pending approval?',
+      'Which pending rule has the highest severity?',
+      'Summarise the rules waiting for review',
+    ],
+  },
+  {
+    label: 'Policies',
+    prompts: [
+      'What governance policies are active?',
+      'Which policy is triggered most often?',
+      'What would improve the governance scorecard?',
+    ],
+  },
+]
+
 function loadHistory(): Message[] {
   if (typeof window === 'undefined') return [WELCOME]
   try {
@@ -330,7 +380,10 @@ function loadHistory(): Message[] {
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 export default function AIAssistantPage() {
+  const [mode, setMode] = useState<ChatMode>('general')
   const [messages, setMessages] = useState<Message[]>(loadHistory)
+  const [govMessages, setGovMessages] = useState<Message[]>([GOVERNANCE_WELCOME])
+  const [activeGovGroup, setActiveGovGroup] = useState(0)
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [llmStatus, setLlmStatus] = useState<LLMStatus | null>(null)
@@ -577,22 +630,91 @@ export default function AIAssistantPage() {
     }
   }
 
+  // ── Governance mode send (non-streaming) ──────────────────────────────────
+
+  const sendGovernance = async (text?: string) => {
+    const msg = (text ?? input).trim()
+    if (!msg || loading) return
+    setInput('')
+    setLoading(true)
+    setIsAtBottom(true)
+
+    const history = govMessages
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .filter(m => m.content !== GOVERNANCE_WELCOME.content)
+      .slice(-12)
+      .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }))
+
+    setGovMessages(m => [
+      ...m,
+      { role: 'user', content: msg },
+      { role: 'assistant', content: '', streaming: true },
+    ])
+
+    try {
+      const res = await aiApi.governanceChat({ message: msg, history })
+      const reply = res.data.response || 'No response received.'
+      setGovMessages(m => {
+        const last = m[m.length - 1]
+        if (last?.role === 'assistant' && last.streaming) {
+          return [...m.slice(0, -1), { role: 'assistant', content: reply, streaming: false }]
+        }
+        return m
+      })
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail || e.message || 'Connection failed'
+      setGovMessages(m => {
+        const last = m[m.length - 1]
+        if (last?.role === 'assistant' && last.streaming) {
+          return [...m.slice(0, -1), { role: 'error', content: detail }]
+        }
+        return [...m, { role: 'error', content: detail }]
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSend = (text?: string) => mode === 'governance' ? sendGovernance(text) : send(text)
+  const activeMessages = mode === 'governance' ? govMessages : messages
+
   return (
     <div className="flex flex-col h-screen max-h-screen bg-gray-50">
 
       {/* ── Header ── */}
       <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shrink-0">
-        <div>
+        <div className="flex items-center gap-4">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center">
-              <Bot size={16} className="text-white" />
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${mode === 'governance' ? 'bg-violet-600' : 'bg-blue-600'}`}>
+              {mode === 'governance' ? <Shield size={16} className="text-white" /> : <Bot size={16} className="text-white" />}
             </div>
             <div>
-              <h1 className="text-lg font-bold text-gray-900 leading-tight">DQ Intelligence</h1>
+              <h1 className="text-lg font-bold text-gray-900 leading-tight">
+                {mode === 'governance' ? 'Governance Advisor' : 'DQ Intelligence'}
+              </h1>
               <p className="text-xs text-gray-400">
-                Live platform data · {messages.filter(m => m.role !== 'assistant' || m.content !== WELCOME.content).length} messages
+                Live platform data · {activeMessages.filter(m => m.role === 'user').length} messages
               </p>
             </div>
+          </div>
+          {/* Mode tabs */}
+          <div className="flex bg-gray-100 rounded-lg p-0.5">
+            <button
+              onClick={() => setMode('general')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                mode === 'general' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Bot size={12} /> General
+            </button>
+            <button
+              onClick={() => setMode('governance')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                mode === 'governance' ? 'bg-white text-violet-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Shield size={12} /> Governance
+            </button>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -625,26 +747,53 @@ export default function AIAssistantPage() {
         <div className="w-64 shrink-0 bg-white border-r border-gray-200 overflow-y-auto p-4 space-y-4">
           <div>
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Example Questions</p>
-            <div className="flex flex-wrap gap-1 mb-3">
-              {EXAMPLE_GROUPS.map((g, i) => (
-                <button key={i} onClick={() => setActiveGroup(i)}
-                  className={`px-2 py-0.5 text-[11px] rounded-full border transition-colors ${
-                    activeGroup === i
-                      ? 'bg-blue-600 text-white border-blue-600'
-                      : 'border-gray-200 text-gray-500 hover:border-blue-300 hover:text-blue-600'
-                  }`}>
-                  {g.label}
-                </button>
-              ))}
-            </div>
-            <div className="space-y-1.5">
-              {EXAMPLE_GROUPS[activeGroup].examples.map(ex => (
-                <button key={ex} onClick={() => send(ex)} disabled={loading}
-                  className="w-full text-left px-3 py-2 text-xs text-gray-600 bg-gray-50 hover:bg-blue-50 hover:text-blue-700 border border-gray-100 hover:border-blue-200 rounded-lg transition-colors leading-relaxed disabled:opacity-50">
-                  {ex}
-                </button>
-              ))}
-            </div>
+            {mode === 'general' ? (
+              <>
+                <div className="flex flex-wrap gap-1 mb-3">
+                  {EXAMPLE_GROUPS.map((g, i) => (
+                    <button key={i} onClick={() => setActiveGroup(i)}
+                      className={`px-2 py-0.5 text-[11px] rounded-full border transition-colors ${
+                        activeGroup === i
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'border-gray-200 text-gray-500 hover:border-blue-300 hover:text-blue-600'
+                      }`}>
+                      {g.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="space-y-1.5">
+                  {EXAMPLE_GROUPS[activeGroup].examples.map(ex => (
+                    <button key={ex} onClick={() => handleSend(ex)} disabled={loading}
+                      className="w-full text-left px-3 py-2 text-xs text-gray-600 bg-gray-50 hover:bg-blue-50 hover:text-blue-700 border border-gray-100 hover:border-blue-200 rounded-lg transition-colors leading-relaxed disabled:opacity-50">
+                      {ex}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex flex-wrap gap-1 mb-3">
+                  {GOVERNANCE_EXAMPLE_GROUPS.map((g, i) => (
+                    <button key={i} onClick={() => setActiveGovGroup(i)}
+                      className={`px-2 py-0.5 text-[11px] rounded-full border transition-colors ${
+                        activeGovGroup === i
+                          ? 'bg-violet-600 text-white border-violet-600'
+                          : 'border-gray-200 text-gray-500 hover:border-violet-300 hover:text-violet-600'
+                      }`}>
+                      {g.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="space-y-1.5">
+                  {GOVERNANCE_EXAMPLE_GROUPS[activeGovGroup].prompts.map(ex => (
+                    <button key={ex} onClick={() => handleSend(ex)} disabled={loading}
+                      className="w-full text-left px-3 py-2 text-xs text-gray-600 bg-violet-50 hover:bg-violet-100 hover:text-violet-700 border border-violet-100 hover:border-violet-300 rounded-lg transition-colors leading-relaxed disabled:opacity-50">
+                      {ex}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
 
           <div className="border-t border-gray-100 pt-3">
@@ -670,7 +819,7 @@ export default function AIAssistantPage() {
 
           {/* Messages */}
           <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-6 space-y-6">
-            {messages.map((msg, i) => {
+            {activeMessages.map((msg, i) => {
               if (msg.role === 'error') return (
                 <div key={i} className="flex gap-3">
                   <div className="w-9 h-9 rounded-full bg-red-100 flex items-center justify-center shrink-0 mt-0.5">
@@ -770,20 +919,28 @@ export default function AIAssistantPage() {
                 value={input}
                 onChange={e => setInput(e.target.value.slice(0, INPUT_MAX))}
                 onKeyDown={e => {
-                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
+                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
                 }}
-                placeholder="Ask about quality, rules, governance, incidents… (Shift+Enter for new line)"
+                placeholder={mode === 'governance'
+                  ? 'Ask about violations, approvals, policies… (Shift+Enter for new line)'
+                  : 'Ask about quality, rules, governance, incidents… (Shift+Enter for new line)'}
                 disabled={loading}
-                className="flex-1 px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white disabled:opacity-60 resize-none overflow-y-auto max-h-32"
+                className={`flex-1 px-4 py-3 border rounded-xl text-sm focus:outline-none bg-white disabled:opacity-60 resize-none overflow-y-auto max-h-32 ${
+                  mode === 'governance'
+                    ? 'border-violet-200 focus:ring-2 focus:ring-violet-400 focus:border-transparent'
+                    : 'border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+                }`}
               />
               {loading ? (
-                <button onClick={stopStreaming}
+                <button onClick={mode === 'governance' ? () => setLoading(false) : stopStreaming}
                   className="flex items-center gap-1.5 px-4 py-3 bg-red-50 text-red-600 border border-red-200 rounded-xl text-sm font-medium hover:bg-red-100 transition-colors shrink-0">
                   <div className="w-3 h-3 bg-red-500 rounded-sm" /> Stop
                 </button>
               ) : (
-                <button onClick={() => send()} disabled={!input.trim() || rateCooldown > 0 || input.length >= INPUT_MAX}
-                  className="p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-40 transition-colors shrink-0">
+                <button onClick={() => handleSend()} disabled={!input.trim() || rateCooldown > 0 || input.length >= INPUT_MAX}
+                  className={`p-3 text-white rounded-xl disabled:opacity-40 transition-colors shrink-0 ${
+                    mode === 'governance' ? 'bg-violet-600 hover:bg-violet-700' : 'bg-blue-600 hover:bg-blue-700'
+                  }`}>
                   {rateCooldown > 0 ? <span className="text-xs font-bold px-1">{rateCooldown}s</span> : <Send size={18} />}
                 </button>
               )}

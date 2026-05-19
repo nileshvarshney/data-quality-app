@@ -1,11 +1,11 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { governanceApi } from '@/services/apiClient'
+import { governanceApi, aiApi } from '@/services/apiClient'
 import {
   Shield, AlertTriangle, CheckCircle, Settings, Loader2, X, Plus,
   RefreshCw, ChevronRight, ChevronDown, ExternalLink, Database,
-  Table2, ArrowRight,
+  Table2, ArrowRight, Sparkles, Bot, ChevronUp,
 } from 'lucide-react'
 import clsx from 'clsx'
 import HowItWorks from '@/components/common/HowItWorks'
@@ -326,6 +326,13 @@ function ViolationsTab() {
   const [loading, setLoading]       = useState(true)
   const [resolving, setResolving]   = useState<string | null>(null)
 
+  // AI Review Queue state
+  const [queueOpen,       setQueueOpen]       = useState(false)
+  const [queueLoading,    setQueueLoading]    = useState(false)
+  const [queue,           setQueue]           = useState<any | null>(null)
+  const [resolutionMap,   setResolutionMap]   = useState<Record<string, string>>({})
+  const [resolvingAI,     setResolvingAI]     = useState<string | null>(null)
+
   const load = useCallback(async () => {
     setLoading(true)
     try {
@@ -348,6 +355,25 @@ function ViolationsTab() {
     } finally {
       setResolving(null)
     }
+  }
+
+  const loadQueue = async () => {
+    setQueueLoading(true)
+    try {
+      const res = await aiApi.governanceReviewQueue()
+      setQueue(res.data)
+      setQueueOpen(true)
+    } catch { /* silently ignore */ }
+    finally { setQueueLoading(false) }
+  }
+
+  const draftResolution = async (violationId: string) => {
+    setResolvingAI(violationId)
+    try {
+      const res = await aiApi.suggestViolationResolution(violationId)
+      setResolutionMap(prev => ({ ...prev, [violationId]: res.data.suggested_resolution }))
+    } catch { /* silently ignore */ }
+    finally { setResolvingAI(null) }
   }
 
   // Navigate to the page where the user can fix the violation
@@ -399,7 +425,147 @@ function ViolationsTab() {
   }
 
   return (
-    <div>
+    <div className="space-y-4">
+
+      {/* ── AI Review Queue Panel ── */}
+      <div className="bg-gradient-to-r from-violet-50 to-indigo-50 border border-violet-200 rounded-xl overflow-hidden">
+        <div className="px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-violet-600 flex items-center justify-center">
+              <Bot size={14} className="text-white" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-violet-900">AI Review Queue</p>
+              <p className="text-xs text-violet-600">AI-prioritised violations with suggested actions</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {queue && (
+              <button onClick={() => setQueueOpen(o => !o)} className="text-violet-600 hover:text-violet-800">
+                {queueOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              </button>
+            )}
+            <button
+              onClick={loadQueue}
+              disabled={queueLoading}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-50 transition-colors"
+            >
+              {queueLoading ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
+              {queueLoading ? 'Loading…' : queue ? 'Refresh Queue' : 'Load AI Queue'}
+            </button>
+          </div>
+        </div>
+
+        {queue && queueOpen && (
+          <div className="border-t border-violet-200 px-4 py-4 space-y-3">
+            {/* Priority summary */}
+            {queue.summary && (
+              <div className="flex items-start gap-2 bg-white rounded-lg px-3 py-2.5 border border-violet-100">
+                <Bot size={13} className="text-violet-500 shrink-0 mt-0.5" />
+                <p className="text-xs text-gray-700 leading-relaxed">{queue.summary}</p>
+              </div>
+            )}
+
+            {/* AI-prioritised violations */}
+            {queue.violations?.length > 0 && (
+              <div>
+                <p className="text-[11px] font-semibold text-violet-700 uppercase tracking-wider mb-2">
+                  Open Violations ({queue.violations.length})
+                </p>
+                <div className="space-y-2">
+                  {queue.violations.map((v: any) => {
+                    const action = queue.ai_actions?.violation_actions?.[v.violation_id]
+                    const resolution = resolutionMap[v.violation_id]
+                    return (
+                      <div key={v.violation_id} className="bg-white rounded-lg border border-violet-100 p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className={clsx('text-[10px] font-bold px-1.5 py-0.5 rounded uppercase',
+                                v.severity === 'critical' ? 'bg-red-100 text-red-700' :
+                                v.severity === 'high'     ? 'bg-orange-100 text-orange-700' :
+                                v.severity === 'medium'   ? 'bg-yellow-100 text-yellow-700' :
+                                                            'bg-gray-100 text-gray-600'
+                              )}>{v.severity}</span>
+                              <span className="text-xs font-medium text-gray-900 truncate">{v.policy_name}</span>
+                            </div>
+                            <p className="text-xs text-gray-500 line-clamp-1">{v.detail}</p>
+                            {action && (
+                              <p className="text-xs text-violet-700 mt-1.5 font-medium">
+                                💡 {action}
+                              </p>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => draftResolution(v.violation_id)}
+                            disabled={resolvingAI === v.violation_id}
+                            className="shrink-0 flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-violet-700 border border-violet-300 rounded-lg hover:bg-violet-50 disabled:opacity-50 transition-colors"
+                          >
+                            {resolvingAI === v.violation_id
+                              ? <Loader2 size={10} className="animate-spin" />
+                              : <Sparkles size={10} />}
+                            Draft Resolution
+                          </button>
+                        </div>
+                        {resolution && (
+                          <div className="mt-2 bg-violet-50 rounded-lg px-3 py-2 border border-violet-100">
+                            <p className="text-[11px] font-semibold text-violet-700 mb-1">AI-Drafted Resolution Note</p>
+                            <p className="text-xs text-gray-700 leading-relaxed">{resolution}</p>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Pending rule approvals */}
+            {queue.pending_approvals?.length > 0 && (
+              <div>
+                <p className="text-[11px] font-semibold text-violet-700 uppercase tracking-wider mb-2">
+                  Pending Approvals ({queue.pending_approvals.length})
+                </p>
+                <div className="space-y-2">
+                  {queue.pending_approvals.map((r: any) => {
+                    const action = queue.ai_actions?.approval_actions?.[r.rule_id]
+                    return (
+                      <div key={r.rule_id} className="bg-white rounded-lg border border-violet-100 p-3 flex items-start gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className={clsx('text-[10px] font-bold px-1.5 py-0.5 rounded uppercase',
+                              r.severity === 'critical' ? 'bg-red-100 text-red-700' :
+                              r.severity === 'high'     ? 'bg-orange-100 text-orange-700' :
+                                                          'bg-yellow-100 text-yellow-700'
+                            )}>{r.severity}</span>
+                            <span className="text-xs font-medium text-gray-900 truncate">{r.rule_name}</span>
+                          </div>
+                          <p className="text-xs text-gray-400">{r.table} · {r.domain} · by {r.created_by || 'unknown'}</p>
+                          {action && <p className="text-xs text-violet-700 mt-1 font-medium">💡 {action}</p>}
+                        </div>
+                        <button
+                          onClick={() => router.push(`/rules/${r.rule_id}`)}
+                          className="shrink-0 flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-indigo-700 border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-colors"
+                        >
+                          <ChevronRight size={10} /> Review
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {queue.violations?.length === 0 && queue.pending_approvals?.length === 0 && (
+              <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 rounded-lg px-3 py-2.5">
+                <CheckCircle size={14} className="text-green-500" /> No items require attention.
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Violations table ── */}
       {loading ? (
         <div className="space-y-2">
           {Array.from({ length: 5 }).map((_, i) => (
