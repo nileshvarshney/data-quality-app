@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import React, { useEffect, useState, useCallback, useMemo } from 'react'
 import { useParams, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -13,7 +13,6 @@ import { dashboardApi, executionsApi, aiApi, assetsApi, glossaryApi } from '@/se
 import { profilingApi } from '@/services/profilingApi'
 import QualityTrendChart from '@/components/charts/QualityTrendChart'
 import ProfileTrendsTab from '@/components/profiling/ProfileTrendsTab'
-import ScoreRing from '@/components/common/ScoreRing'
 import SeverityBadge, { StatusBadge } from '@/components/common/SeverityBadge'
 import CertificationBadge from '@/components/common/CertificationBadge'
 import Breadcrumbs from '@/components/common/Breadcrumbs'
@@ -189,7 +188,6 @@ export default function TableDashboardPage() {
     : pathname.split('/').filter(Boolean).pop() ?? ''
   const { theme }   = useTheme()
   const { formatTs, formatTime } = useTimezone()
-  const trackColor  = theme === 'dark' ? '#334155' : '#e2e8f0'
 
   const [data,      setData]      = useState<any>(null)
   const [loading,   setLoading]   = useState(true)
@@ -609,9 +607,8 @@ export default function TableDashboardPage() {
                     : (data.recent_runs || []).find((r: any) => r.rule_id === rule.rule_id && r.status !== 'passed')
                   const isExpanded = expandedRun === rule.rule_id
                   return (
-                    <>
+                    <React.Fragment key={rule.rule_id}>
                       <tr
-                        key={rule.rule_id}
                         className="hover:bg-red-50/30 cursor-pointer transition-colors"
                         onClick={() => setExpandedRun(isExpanded ? null : rule.rule_id)}
                       >
@@ -667,7 +664,7 @@ export default function TableDashboardPage() {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </React.Fragment>
                   )
                 })}
               </tbody>
