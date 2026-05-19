@@ -21,13 +21,6 @@ function scoreColor(s: number): string {
   return '#ef4444'
 }
 
-function scoreBorderColor(s: number): string {
-  if (s >= 95) return '#22c55e'
-  if (s >= 80) return '#f59e0b'
-  if (s >= 60) return '#f97316'
-  return '#ef4444'
-}
-
 function relTime(ts: string): string {
   const diff = Math.floor((Date.now() - new Date(ts).getTime()) / 1000)
   if (diff < 60)    return `${diff}s ago`
@@ -87,12 +80,15 @@ export default function DomainDetailPage() {
         executionsApi.listRunsEnriched({ domain_id: domainId, status: 'failed', limit: 8 }),
         dashboardApi.dimensions({ domain_id: domainId }),
       ])
-      if (dRes.status   === 'fulfilled') setData(dRes.value.data)
-      else setError('Failed to load domain data')
+      if (dRes.status   === 'fulfilled') {
+        setData(dRes.value.data)
+        setError('')
+      } else {
+        setError('Failed to load domain data')
+      }
       if (rRes.status   === 'fulfilled') setRecentFailures(Array.isArray(rRes.value.data) ? rRes.value.data : [])
       if (dimRes.status === 'fulfilled') setDimensions(dimRes.value.data)
       setLastRefreshed(new Date())
-      setError('')
     } catch {
       setError('Failed to load domain data.')
     } finally {
@@ -339,7 +335,7 @@ export default function DomainDetailPage() {
                 className="flex items-center justify-between rounded px-2 py-1.5 relative transition-opacity hover:opacity-80"
                 style={{
                   border: `1px solid ${isRisk ? 'rgba(239,68,68,0.3)' : 'var(--border)'}`,
-                  borderLeftColor: scoreBorderColor(ss),
+                  borderLeftColor: scoreColor(ss),
                   borderLeftWidth: '3px',
                   background: isRisk ? 'rgba(239,68,68,0.04)' : 'var(--surface-sub)',
                 }}>
