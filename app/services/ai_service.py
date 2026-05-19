@@ -513,3 +513,83 @@ async def chat(
     if hasattr(provider, 'complete_messages'):
         return await provider.complete_messages(messages)
     return await provider.complete(prompt, PLATFORM_SYSTEM, max_tokens=1500)
+
+
+async def explain_incident(
+    incident_id: str,
+    provider_name: str | None,
+    db: AsyncSession,
+) -> str:
+    """Explain a quality incident aggregating all related rule run failures."""
+    from app.db.models import QualityIncident
+    from datetime import timedelta
+
+    inc_res = await db.execute(
+        select(QualityIncident).where(QualityIncident.incident_id == incident_id)
+    )
+    incident = inc_res.scalar_one_or_none()
+    if not incident:
+        return "Incident not found."
+
+    asset_res = await db.execute(
+        select(DataAsset, Domain)
+        .join(Domain, DataAsset.domain_id == Domain.domain_id)
+        .where(DataAsset.asset_id == incident.asset_id)
+    )
+    asset_row = asset_res.one_or_none()
+    asset = asset_row.DataAsset if asset_row else None
+    domain = asset_row.Domain if asset_row else None
+
+    related_runs: list[str] = []
+    if incident.trigger_run_id:
+        trigger_res = await db.execute(
+            select(DQRuleRun, DQRule)
+            .join(DQRule, DQRuleRun.rule_id == DQRule.rule_id)
+            .where(DQRuleRun.run_id == incident.trigger_run_id)
+        )
+        for rr in trigger_res.all():
+            related_runs.append(
+                f"- {rr.DQRule.rule_name} ({rr.DQRule.rule_type}): "
+                f"{rr.DQRuleRun.failed_rows_count} failed rows "
+                f"({rr.DQRuleRun.failure_percentage:.1f}%)"
+            )
+
+    window_start = incident.created_at - timedelta(hours=1)
+    window_end   = incident.created_at + timedelta(hours=1)
+    sibling_res = await db.execute(
+        select(DQRuleRun, DQRule)
+        .join(DQRule, DQRuleRun.rule_id == DQRule.rule_id)
+        .where(
+            DQRuleRun.asset_id == incident.asset_id,
+            DQRuleRun.status == "failed",
+            DQRuleRun.created_at >= window_start,
+            DQRuleRun.created_at <= window_end,
+            DQRuleRun.run_id != (incident.trigger_run_id or ""),
+        )
+        .limit(10)
+    )
+    for rr in sibling_res.all():
+        related_runs.append(
+            f"- {rr.DQRule.rule_name} ({rr.DQRule.rule_type}): "
+            f"{rr.DQRuleRun.failed_rows_count} failed rows"
+        )
+
+    table_name = f"{asset.sf_schema_name}.{asset.sf_table_name}" if asset else incident.asset_id
+    domain_name = domain.domain_name if domain else "Unknown"
+    runs_text = "\n".join(related_runs) or "No rule run details available."
+
+    prompt = (
+        f"Incident: {incident.title or 'Data Quality Incident'}\n"
+        f"Table: {table_name}\n"
+        f"Domain: {domain_name}\n"
+        f"Criticality: {asset.criticality if asset else 'unknown'}\n"
+        f"Severity: {incident.severity}\n"
+        f"Status: {incident.status}\n"
+        f"Time to detect: {incident.ttd_minutes or 'unknown'} minutes\n"
+        f"Failed checks:\n{runs_text}\n"
+        f"Prior RCA: {incident.rca_report or 'None'}\n\n"
+        f"Explain this incident in plain business language. "
+        f"Who is affected? What decisions or reports are at risk? What should the data owner do first?"
+    )
+    provider = await get_provider_from_db(provider_name, db)
+    return await provider.complete(prompt, _SYS_EXPLAIN, max_tokens=1000)

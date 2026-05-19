@@ -442,6 +442,25 @@ async def governance_chat(
         raise _llm_err(e)
 
 
+@router.post("/incidents/{incident_id}/explain")
+@limiter.limit("20/minute")
+async def explain_incident_endpoint(
+    request: Request,
+    incident_id: str,
+    payload: dict = {},
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Explain a quality incident in business terms, aggregating all related rule failures."""
+    try:
+        explanation = await ai_service.explain_incident(
+            incident_id, payload.get("provider"), db
+        )
+        return {"incident_id": incident_id, "explanation": explanation}
+    except RuntimeError as e:
+        raise _llm_err(e)
+
+
 @router.post("/incidents/{incident_id}/generate-postmortem")
 async def generate_postmortem(
     incident_id: str,
