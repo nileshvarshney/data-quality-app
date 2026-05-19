@@ -875,3 +875,140 @@ async def suggest_violation_resolution(
     )
     provider = await get_provider_from_db(provider_name, db)
     return await provider.complete(prompt, sys_res, max_tokens=300)
+
+
+async def predict_asset_quality(
+    asset_id: str,
+    provider_name: str | None,
+    db: AsyncSession,
+) -> dict:
+    """Predict future data quality risk using LLM trend analysis on the last 60 runs."""
+    import json as _j
+    from collections import defaultdict
+    from app.db.models import AnomalyDetector, AnomalyDetection, gen_uuid, now as _now
+    from datetime import datetime, timezone
+
+    asset_res = await db.execute(
+        select(DataAsset, Domain)
+        .join(Domain, DataAsset.domain_id == Domain.domain_id)
+        .where(DataAsset.asset_id == asset_id)
+    )
+    row = asset_res.one_or_none()
+    if not row:
+        return {"error": "Asset not found"}
+    asset, domain = row.DataAsset, row.Domain
+
+    runs_res = await db.execute(
+        select(DQRuleRun, DQRule)
+        .join(DQRule, DQRuleRun.rule_id == DQRule.rule_id)
+        .where(DQRuleRun.asset_id == asset_id)
+        .order_by(desc(DQRuleRun.created_at))
+        .limit(60)
+    )
+    runs = runs_res.all()
+
+    if len(runs) < 3:
+        return {
+            "asset_id": asset_id,
+            "risk_score": None,
+            "message": "Insufficient run history (need at least 3 runs).",
+        }
+
+    scores = [r.DQRuleRun.quality_score for r in runs if r.DQRuleRun.quality_score is not None]
+    statuses = [r.DQRuleRun.status for r in runs]
+    fail_count = statuses.count("failed") + statuses.count("error")
+
+    half = len(scores) // 2
+    recent_avg = sum(scores[:half]) / half if half else 0
+    older_avg  = sum(scores[half:]) / (len(scores) - half) if len(scores) - half > 0 else 0
+    trend = "improving" if recent_avg > older_avg + 2 else (
+            "degrading"  if recent_avg < older_avg - 2 else "stable")
+
+    from collections import Counter
+    rule_fail: dict[str, int] = defaultdict(int)
+    for r in runs:
+        if r.DQRuleRun.status == "failed":
+            rule_fail[r.DQRule.rule_name] += 1
+    worst_rule = max(rule_fail, key=lambda k: rule_fail[k]) if rule_fail else "none"
+
+    now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+    day_scores: dict[str, list[float]] = defaultdict(list)
+    for r in runs:
+        if r.DQRuleRun.created_at and r.DQRuleRun.quality_score is not None:
+            age = (now_dt - r.DQRuleRun.created_at).days
+            if age <= 14:
+                day_scores[str(age)].append(r.DQRuleRun.quality_score)
+    daily_avg = {
+        d: round(sum(v) / len(v), 1)
+        for d, v in sorted(day_scores.items(), key=lambda x: int(x[0]))
+    }
+
+    trend_text = (
+        f"Asset: {asset.sf_schema_name}.{asset.sf_table_name} (domain: {domain.domain_name})\n"
+        f"Total runs analysed: {len(runs)}\n"
+        f"Failed/error runs: {fail_count} of {len(runs)} ({100*fail_count//len(runs)}%)\n"
+        f"Average quality score (recent {half} runs): {recent_avg:.1f}%\n"
+        f"Average quality score (older {len(scores)-half} runs): {older_avg:.1f}%\n"
+        f"Trend: {trend}\n"
+        f"Most frequently failing rule: {worst_rule} ({rule_fail.get(worst_rule,0)} times)\n"
+        f"Daily quality scores (day 0 = today): {daily_avg}\n"
+    )
+
+    sys_predict = (
+        "You are a data quality analyst. Based on historical quality trends, predict whether "
+        "this asset is likely to fail in the next 7 days. "
+        "Return ONLY valid JSON: {\"risk_score\": 0.0-1.0, \"risk_level\": \"critical\"|\"high\"|\"medium\"|\"low\", "
+        "\"prediction\": \"single sentence\", \"likely_failure_rule\": \"rule name or null\", "
+        "\"recommended_preventive_action\": \"single sentence\", \"confidence\": 0.0-1.0}"
+    )
+
+    provider = await get_provider_from_db(provider_name, db)
+    raw = await provider.complete(trend_text, sys_predict, max_tokens=400)
+    try:
+        start = raw.find("{"); end = raw.rfind("}") + 1
+        prediction = _j.loads(raw[start:end]) if start >= 0 else {}
+    except Exception:
+        prediction = {"risk_score": 0.5, "risk_level": "medium", "prediction": raw[:200]}
+
+    # Upsert AnomalyDetector
+    detector_res = await db.execute(
+        select(AnomalyDetector).where(
+            AnomalyDetector.asset_id == asset_id,
+            AnomalyDetector.detector_type == "llm_predictor",
+        )
+    )
+    detector = detector_res.scalar_one_or_none()
+    if not detector:
+        detector = AnomalyDetector(
+            detector_id=gen_uuid(),
+            asset_id=asset_id,
+            detector_type="llm_predictor",
+            config={"provider": provider_name or "default"},
+            is_active=True,
+        )
+        db.add(detector)
+        await db.flush()
+
+    detector.last_trained_at = _now()
+
+    detection = AnomalyDetection(
+        detection_id=gen_uuid(),
+        detector_id=detector.detector_id,
+        asset_id=asset_id,
+        anomaly_type="quality_forecast",
+        severity=prediction.get("risk_level", "medium"),
+        observed_value=f"quality_score={recent_avg:.1f}%,trend={trend}",
+        expected_range=">=95%",
+        confidence=prediction.get("confidence", 0.5),
+    )
+    db.add(detection)
+    await db.commit()
+
+    return {
+        "asset_id": asset_id,
+        "table": f"{asset.sf_schema_name}.{asset.sf_table_name}",
+        "trend": trend,
+        "recent_quality_avg": round(recent_avg, 1),
+        "runs_analysed": len(runs),
+        "prediction": prediction,
+    }
