@@ -1,5 +1,5 @@
 'use client'
-import { useRef, useCallback, useMemo } from 'react'
+import { useRef, useCallback, useMemo, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { HelpCircle } from 'lucide-react'
@@ -48,6 +48,12 @@ export default function Sidebar({ badges, openSection, onSectionChange }: Sideba
   const scheduleClose = useCallback(() => {
     closeTimer.current = setTimeout(() => onSectionChange(null), 150)
   }, [onSectionChange])
+
+  useEffect(() => {
+    return () => {
+      if (closeTimer.current) clearTimeout(closeTimer.current)
+    }
+  }, [])
 
   const handleIconClick = useCallback((sectionId: string) => {
     cancelClose()

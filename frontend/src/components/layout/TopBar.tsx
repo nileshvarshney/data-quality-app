@@ -59,6 +59,7 @@ export default function TopBar({ alertCount, onHamburgerClick }: TopBarProps) {
         <button
           onClick={onHamburgerClick}
           title="Toggle navigation"
+          aria-label="Toggle navigation"
           className="p-2 rounded-lg transition-colors hover:[background-color:var(--sidebar-hover)]"
           style={{ color: 'var(--text-3)' }}
         >
@@ -106,6 +107,7 @@ export default function TopBar({ alertCount, onHamburgerClick }: TopBarProps) {
         {/* Notification bell */}
         <button
           title={alertCount > 0 ? `${alertCount} open alerts` : 'Notifications'}
+          aria-label={alertCount > 0 ? `${alertCount} open alerts` : 'Notifications'}
           className="relative w-9 h-9 rounded-full flex items-center justify-center transition-colors border hover:[background-color:var(--sidebar-hover)]"
           style={{ borderColor: 'var(--border)', color: 'var(--text-3)' }}
         >
