@@ -24,12 +24,6 @@ function scoreColor(s: number) {
   if (s >= 60) return 'text-orange-400'
   return 'text-red-400'
 }
-function scoreBorderColor(s: number) {
-  if (s >= 95) return 'border-green-500'
-  if (s >= 80) return 'border-yellow-500'
-  if (s >= 60) return 'border-orange-500'
-  return 'border-red-500'
-}
 function relTime(ts: string): string {
   const diff = Math.floor((Date.now() - new Date(ts).getTime()) / 1000)
   if (diff < 60)    return `${diff}s ago`
@@ -116,7 +110,7 @@ export default function DomainDetailPage() {
   const passTotal = passedRules + failedRules
 
   return (
-    <div className="flex flex-col gap-2 p-4 h-full max-w-[1600px]">
+    <div className="flex flex-col gap-2 p-4 h-full max-w-[1600px] overflow-hidden">
 
       {/* Breadcrumb */}
       <Breadcrumbs items={[
