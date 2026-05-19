@@ -34,6 +34,18 @@
   --sidebar-active-bg:     #e0e7ff;
   --sidebar-active-text:   #3730a3;
   --sidebar-active-bar:    #4f46e5;
+
+  /* TopBar */
+  --topbar-height: 52px;
+  --topbar-bg:     #ffffff;
+  --topbar-border: #e2e8f0;
+
+  /* Flyout panel */
+  --flyout-bg:     #ffffff;
+  --flyout-border: #e2e8f0;
+
+  /* Sidebar icon strip */
+  --sidebar-icon-color: #cbd5e1;
 }
 
 html.dark {
@@ -66,6 +78,14 @@ html.dark {
   --sidebar-active-bg:     rgba(99, 102, 241, 0.20);
   --sidebar-active-text:   #a5b4fc;
   --sidebar-active-bar:    #818cf8;
+
+  --topbar-bg:     #141824;
+  --topbar-border: #1e2235;
+
+  --flyout-bg:     #141824;
+  --flyout-border: #1e2235;
+
+  --sidebar-icon-color: #334155;
 }
 
 body {
@@ -75,22 +95,85 @@ body {
 
 /* ── Layout ───────────────────────────────────────────────────────────────── */
 
-.sidebar {
-  width: var(--sidebar-width);
+/* ── Top bar ──────────────────────────────────────────────────────────────── */
+
+.topbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--topbar-height);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 12px;
+  z-index: 30;
+  background-color: var(--topbar-bg);
+  border-bottom: 1px solid var(--topbar-border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+/* ── Sidebar nav zone (icon strip + flyout container) ─────────────────────── */
+
+.sidebar-nav-zone {
+  position: fixed;
+  left: 0;
+  top: var(--topbar-height);
+  height: calc(100vh - var(--topbar-height));
+  display: flex;
+  z-index: 20;
+}
+
+.icon-sidebar {
+  width: 64px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   background-color: var(--sidebar-bg);
   border-right: 1px solid var(--sidebar-border);
-  color: var(--sidebar-text);
-  @apply fixed left-0 top-0 h-full flex flex-col z-30;
-  transition: width 0.3s ease;
 }
 
-/* Compact (icon-only) sidebar */
-.sidebar--compact {
-  width: 64px;
+/* ── Flyout panel ─────────────────────────────────────────────────────────── */
+
+.flyout-panel {
+  position: absolute;
+  top: 0;
+  left: 64px;
+  width: 180px;
+  height: 100%;
+  background-color: var(--flyout-bg);
+  border-right: 1px solid var(--flyout-border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 15;
+  box-shadow: 4px 0 20px rgba(0, 0, 0, 0.12);
 }
 
-.sidebar--compact .main-content-offset {
+.flyout-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 12px 7px;
+  border-bottom: 1px solid var(--flyout-border);
+  flex-shrink: 0;
+}
+
+.flyout-items {
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+/* ── Main content ─────────────────────────────────────────────────────────── */
+
+.main-content {
   margin-left: 64px;
+  min-height: 100vh;
+  padding-top: var(--topbar-height);
 }
 
 /* Scrollbar for nav */
@@ -103,12 +186,6 @@ body {
 .scrollbar-thin::-webkit-scrollbar-thumb {
   background: var(--sidebar-border);
   border-radius: 2px;
-}
-
-.main-content {
-  margin-left: var(--sidebar-width);
-  @apply min-h-screen;
-  transition: margin-left 0.3s ease;
 }
 
 /* ── Score & badge utilities ──────────────────────────────────────────────── */
