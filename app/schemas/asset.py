@@ -70,3 +70,30 @@ class DataAssetResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class DiscoverySelection(BaseModel):
+    database: str
+    schema: str
+
+
+class DiscoveryRequest(BaseModel):
+    connection_id: str
+    selections: list[DiscoverySelection]
+    criticality: Criticality = "medium"
+    owner_name: Optional[str] = None
+    owner_email: Optional[str] = None
+    technical_owner_name: Optional[str] = None
+    technical_owner_email: Optional[str] = None
+    provider: Optional[str] = None
+
+
+class DiscoveryTableResult(BaseModel):
+    database: str
+    schema: str
+    table_name: str
+    status: Literal["imported", "skipped", "error"]
+    reason: Optional[str] = None
+    asset_id: Optional[str] = None
+    domain_name: Optional[str] = None
+    subdomain_name: Optional[str] = None
