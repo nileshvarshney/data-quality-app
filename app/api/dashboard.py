@@ -4,7 +4,7 @@ import io
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc, and_
+from sqlalchemy import select, func, desc, and_, case, literal_column
 from datetime import datetime, timezone, timedelta, date
 from typing import Optional
 from app.db.database import get_db
@@ -98,6 +98,228 @@ async def _build_trend(
     return trend
 
 
+async def _get_sla_breaches(db: AsyncSession, domain_scope: str | None = None) -> list[dict]:
+    """
+    Return top-5 tables whose 7-day average quality score is below 95.
+    Shape: { table_name, schema_name, domain_name, score, days_below_sla }
+    """
+    today = datetime.now(timezone.utc).replace(tzinfo=None).date()
+    cutoff = today - timedelta(days=7)
+
+    # Fetch all runs for the last 7 days joined with asset + domain info
+    q = (
+        select(
+            DQRuleRun.asset_id,
+            DataAsset.sf_table_name,
+            DataAsset.sf_schema_name,
+            Domain.domain_name,
+            func.date(DQRuleRun.created_at).label("run_date"),
+            func.avg(DQRuleRun.quality_score).label("day_avg"),
+        )
+        .join(DataAsset, DQRuleRun.asset_id == DataAsset.asset_id)
+        .join(Domain, DQRuleRun.domain_id == Domain.domain_id)
+        .where(
+            func.date(DQRuleRun.created_at) >= cutoff,
+            func.date(DQRuleRun.created_at) <= today,
+            DQRuleRun.quality_score.isnot(None),
+        )
+        .group_by(
+            DQRuleRun.asset_id,
+            DataAsset.sf_table_name,
+            DataAsset.sf_schema_name,
+            Domain.domain_name,
+            func.date(DQRuleRun.created_at),
+        )
+    )
+    if domain_scope:
+        q = q.where(DQRuleRun.domain_id == domain_scope)
+
+    rows = (await db.execute(q)).all()
+
+    # Aggregate per asset: avg score over 7 days, count days below SLA
+    asset_data: dict[str, dict] = {}
+    for row in rows:
+        key = row.asset_id
+        if key not in asset_data:
+            asset_data[key] = {
+                "table_name": row.sf_table_name,
+                "schema_name": row.sf_schema_name,
+                "domain_name": row.domain_name,
+                "day_scores": [],
+            }
+        if row.day_avg is not None:
+            asset_data[key]["day_scores"].append(float(row.day_avg))
+
+    results = []
+    for entry in asset_data.values():
+        day_scores = entry["day_scores"]
+        if not day_scores:
+            continue
+        avg_score = sum(day_scores) / len(day_scores)
+        if avg_score >= 95.0:
+            continue
+        days_below_sla = sum(1 for s in day_scores if s < 95.0)
+        results.append({
+            "table_name": entry["table_name"],
+            "schema_name": entry["schema_name"],
+            "domain_name": entry["domain_name"],
+            "score": round(avg_score, 1),
+            "days_below_sla": days_below_sla,
+        })
+
+    results.sort(key=lambda x: x["score"])
+    return results[:5]
+
+
+async def _get_at_risk_tables(db: AsyncSession, domain_scope: str | None = None) -> list[dict]:
+    """
+    Return bottom-5 tables by most-recent run quality score.
+    Shape: { table_name, schema_name, domain_name, score, score_delta }
+    score_delta = current score minus score from 7 days ago (negative means declining).
+    """
+    today = datetime.now(timezone.utc).replace(tzinfo=None).date()
+    cutoff_7d = today - timedelta(days=7)
+
+    # Subquery: latest run per asset
+    latest_sq = (
+        select(
+            DQRuleRun.asset_id,
+            func.max(DQRuleRun.created_at).label("latest_ts"),
+        )
+        .where(DQRuleRun.quality_score.isnot(None))
+        .group_by(DQRuleRun.asset_id)
+        .subquery()
+    )
+    if domain_scope:
+        latest_sq = (
+            select(
+                DQRuleRun.asset_id,
+                func.max(DQRuleRun.created_at).label("latest_ts"),
+            )
+            .where(DQRuleRun.quality_score.isnot(None), DQRuleRun.domain_id == domain_scope)
+            .group_by(DQRuleRun.asset_id)
+            .subquery()
+        )
+
+    current_q = (
+        select(
+            DQRuleRun.asset_id,
+            DQRuleRun.quality_score,
+            DataAsset.sf_table_name,
+            DataAsset.sf_schema_name,
+            Domain.domain_name,
+        )
+        .join(latest_sq, and_(
+            DQRuleRun.asset_id == latest_sq.c.asset_id,
+            DQRuleRun.created_at == latest_sq.c.latest_ts,
+        ))
+        .join(DataAsset, DQRuleRun.asset_id == DataAsset.asset_id)
+        .join(Domain, DQRuleRun.domain_id == Domain.domain_id)
+        .where(DQRuleRun.quality_score.isnot(None))
+        .order_by(DQRuleRun.quality_score.asc())
+        .limit(5)
+    )
+
+    current_rows = (await db.execute(current_q)).all()
+    if not current_rows:
+        return []
+
+    asset_ids = [r.asset_id for r in current_rows]
+
+    # Fetch avg score per asset for the 7-days-ago window (±1 day around cutoff)
+    old_window_start = cutoff_7d - timedelta(days=1)
+    old_window_end = cutoff_7d + timedelta(days=1)
+    old_q = (
+        select(
+            DQRuleRun.asset_id,
+            func.avg(DQRuleRun.quality_score).label("old_score"),
+        )
+        .where(
+            DQRuleRun.asset_id.in_(asset_ids),
+            func.date(DQRuleRun.created_at) >= old_window_start,
+            func.date(DQRuleRun.created_at) <= old_window_end,
+            DQRuleRun.quality_score.isnot(None),
+        )
+        .group_by(DQRuleRun.asset_id)
+    )
+    old_rows = (await db.execute(old_q)).all()
+    old_score_map = {r.asset_id: float(r.old_score) for r in old_rows if r.old_score is not None}
+
+    results = []
+    for row in current_rows:
+        current_score = round(float(row.quality_score), 1)
+        old_score = old_score_map.get(row.asset_id)
+        score_delta = round(current_score - old_score, 1) if old_score is not None else 0.0
+        results.append({
+            "table_name": row.sf_table_name,
+            "schema_name": row.sf_schema_name,
+            "domain_name": row.domain_name,
+            "score": current_score,
+            "score_delta": score_delta,
+        })
+    return results
+
+
+async def _get_recently_fixed(db: AsyncSession, domain_scope: str | None = None) -> list[dict]:
+    """
+    Rules that had a failing execution in the last 24h that now show a passing execution.
+    Shape: { rule_name, table_name, domain_name, fixed_at, new_score }
+    Limit 5, ordered by fixed_at DESC.
+    """
+    now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+    since_24h = now_dt - timedelta(hours=24)
+
+    # Fetch all runs from last 24h, ordered by rule + time
+    q = (
+        select(
+            DQRuleRun.rule_id,
+            DQRuleRun.asset_id,
+            DQRuleRun.domain_id,
+            DQRuleRun.status,
+            DQRuleRun.quality_score,
+            DQRuleRun.created_at,
+            DQRule.rule_name,
+            DataAsset.sf_table_name,
+            Domain.domain_name,
+        )
+        .join(DQRule, DQRuleRun.rule_id == DQRule.rule_id)
+        .join(DataAsset, DQRuleRun.asset_id == DataAsset.asset_id)
+        .join(Domain, DQRuleRun.domain_id == Domain.domain_id)
+        .where(DQRuleRun.created_at >= since_24h)
+        .order_by(DQRuleRun.rule_id, DQRuleRun.created_at)
+    )
+    if domain_scope:
+        q = q.where(DQRuleRun.domain_id == domain_scope)
+
+    rows = (await db.execute(q)).all()
+
+    # Group by rule_id, find rules where an earlier run failed and a later run passed
+    from collections import defaultdict
+    by_rule: dict[str, list] = defaultdict(list)
+    for row in rows:
+        by_rule[row.rule_id].append(row)
+
+    fixed = []
+    for rule_id, runs in by_rule.items():
+        # runs are in ascending time order
+        had_failure = False
+        for run in runs:
+            if run.status in ("failed", "error"):
+                had_failure = True
+            elif run.status == "passed" and had_failure:
+                fixed.append({
+                    "rule_name": run.rule_name,
+                    "table_name": run.sf_table_name,
+                    "domain_name": run.domain_name,
+                    "fixed_at": run.created_at.isoformat(),
+                    "new_score": round(float(run.quality_score), 1) if run.quality_score is not None else 100.0,
+                })
+                break  # only report first fix per rule
+
+    fixed.sort(key=lambda x: x["fixed_at"], reverse=True)
+    return fixed[:5]
+
+
 @router.get("/global")
 async def global_dashboard(
     response: Response,
@@ -151,6 +373,9 @@ async def global_dashboard(
     overall_score = round(sum(scores) / len(scores), 1) if scores else 100.0
 
     trend = await _build_trend(db, days=14, domain_id=domain_scope)
+    sla_breaches = await _get_sla_breaches(db, domain_scope)
+    at_risk_tables = await _get_at_risk_tables(db, domain_scope)
+    recently_fixed = await _get_recently_fixed(db, domain_scope)
 
     return {
         "overall_quality_score": overall_score,
@@ -162,6 +387,9 @@ async def global_dashboard(
         "critical_failures": critical_failures,
         "open_alerts": open_alerts,
         "quality_trend": trend,
+        "sla_breaches": sla_breaches,
+        "at_risk_tables": at_risk_tables,
+        "recently_fixed": recently_fixed,
     }
 
 

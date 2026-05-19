@@ -87,6 +87,9 @@ export interface GlobalDashboard {
   critical_failures: number
   open_alerts: number
   quality_trend: Array<{ date: string; score: number | null; total: number; passed: number }>
+  sla_breaches: { table_name: string; schema_name: string; domain_name: string; score: number; days_below_sla: number }[]
+  at_risk_tables: { table_name: string; schema_name: string; domain_name: string; score: number; score_delta: number }[]
+  recently_fixed: { rule_name: string; table_name: string; domain_name: string; fixed_at: string; new_score: number }[]
 }
 
 export interface DomainSummary {
