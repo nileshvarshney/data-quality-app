@@ -369,7 +369,7 @@ async def _bg_predict_all_assets() -> None:
             assets_res = await db.execute(
                 select(DataAsset.asset_id).where(DataAsset.is_active == True).limit(200)
             )
-            asset_ids = [r for r in assets_res.scalars().all()]
+            asset_ids = assets_res.scalars().all()
 
         _log.info(f"Starting nightly quality prediction for {len(asset_ids)} assets")
         success = 0

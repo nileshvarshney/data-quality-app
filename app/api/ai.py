@@ -387,10 +387,11 @@ async def trigger_rca(
     fail_hours = Counter(
         r.created_at.hour for r in history if r.status == "failed" and r.created_at
     )
+    avg_fail_pct = f"{sum(fail_pcts)/len(fail_pcts):.1f}%" if fail_pcts else "N/A"
     trend_summary = (
         f"Last {len(history)} runs: {fail_statuses.get('passed',0)} passed, "
         f"{fail_statuses.get('failed',0)} failed, {fail_statuses.get('error',0)} errors. "
-        f"Avg failure %: {sum(fail_pcts)/len(fail_pcts):.1f}% across {len(fail_pcts)} runs. "
+        f"Avg failure %: {avg_fail_pct} across {len(fail_pcts)} runs. "
         f"Most failures on: {fail_days.most_common(2)}. "
         f"Peak failure hours: {fail_hours.most_common(2)}."
     ) if history else "No run history available."
@@ -415,7 +416,7 @@ async def trigger_rca(
         f"Severity: {rule.severity if rule else 'unknown'}\n"
         f"Table: {asset.sf_table_name if asset else run.asset_id}\n"
         f"Failed rows: {run.failed_rows_count} / {run.total_rows_scanned} "
-        f"({run.failure_percentage:.1f}%)\n"
+        f"({run.failure_percentage or 0.0:.1f}%)\n"
         f"Error message: {run.error_message or 'none'}\n"
         f"Executed SQL: {(run.executed_sql or '')[:400]}\n"
         f"--- Historical trend ---\n{trend_summary}\n"
@@ -623,7 +624,7 @@ async def at_risk_assets(
     user=Depends(get_current_user),
 ):
     """Return assets with highest predicted quality risk from last nightly prediction run."""
-    from sqlalchemy import desc
+    from sqlalchemy import select, desc
     from app.db.models import AnomalyDetection, AnomalyDetector, DataAsset, Domain
 
     det_res = await db.execute(

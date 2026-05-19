@@ -551,7 +551,7 @@ async def explain_incident(
             related_runs.append(
                 f"- {rr.DQRule.rule_name} ({rr.DQRule.rule_type}): "
                 f"{rr.DQRuleRun.failed_rows_count} failed rows "
-                f"({rr.DQRuleRun.failure_percentage:.1f}%)"
+                f"({rr.DQRuleRun.failure_percentage or 0.0:.1f}%)"
             )
 
     window_start = incident.created_at - timedelta(hours=1)
