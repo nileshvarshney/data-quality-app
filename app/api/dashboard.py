@@ -497,6 +497,8 @@ async def domain_dashboard(
     all_rules = rules_result.scalars().all()
 
     trend = await _build_trend(db, days=14, domain_id=domain_id)
+    at_risk_tables = await _get_at_risk_tables(db, domain_scope=domain_id)
+    sla_breaches   = await _get_sla_breaches(db, domain_scope=domain_id)
 
     failed_runs = sorted([r for r in today_runs if r.status in ("failed", "error")],
                          key=lambda r: r.created_at, reverse=True)[:5]
@@ -525,6 +527,8 @@ async def domain_dashboard(
         "subdomains": subdomain_data,
         "quality_trend": trend,
         "top_failing_rules": top_failing,
+        "at_risk_tables": at_risk_tables,
+        "sla_breaches": sla_breaches,
     }
 
 
