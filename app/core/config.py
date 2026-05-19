@@ -91,6 +91,10 @@ class Settings(BaseSettings):
     snowflake_pool_max_size: int = 5
     snowflake_pool_acquire_timeout: float = 30.0
 
+    # Auto data quality rule creation
+    auto_rules_enabled: bool = True
+    auto_rules_max_per_table: int = 10
+
     model_config = {"env_file": ".env", "case_sensitive": False}
 
     def is_weak_secret_key(self) -> bool:
