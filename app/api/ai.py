@@ -562,6 +562,21 @@ async def suggest_glossary_terms(
         raise _llm_err(e)
 
 
+@router.get("/governance/review-queue")
+@limiter.limit("20/minute")
+async def steward_review_queue(
+    request: Request,
+    provider: str | None = None,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """AI-prioritised governance review queue with violations and pending approvals."""
+    try:
+        return await ai_service.get_steward_review_queue(provider, db)
+    except RuntimeError as e:
+        raise _llm_err(e)
+
+
 @router.post("/incidents/{incident_id}/generate-postmortem")
 async def generate_postmortem(
     incident_id: str,

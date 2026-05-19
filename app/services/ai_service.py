@@ -747,3 +747,81 @@ async def suggest_glossary_terms(
         return _j.loads(raw[start:end]) if start >= 0 else []
     except Exception:
         return []
+
+
+async def get_steward_review_queue(
+    provider_name: str | None,
+    db: AsyncSession,
+) -> dict:
+    """Return AI-prioritised governance review queue with suggested actions."""
+    import json as _j
+
+    viol_res = await db.execute(
+        select(PolicyViolation, GovernancePolicy)
+        .join(GovernancePolicy, PolicyViolation.policy_id == GovernancePolicy.policy_id)
+        .where(PolicyViolation.status == "open")
+        .order_by(GovernancePolicy.severity.desc(), PolicyViolation.detected_at.asc())
+        .limit(10)
+    )
+    violations = [
+        {
+            "violation_id": r.PolicyViolation.violation_id,
+            "policy_name": r.GovernancePolicy.policy_name,
+            "severity": r.GovernancePolicy.severity,
+            "detail": r.PolicyViolation.violation_detail,
+            "detected_at": str(r.PolicyViolation.detected_at),
+            "entity_type": r.PolicyViolation.entity_type,
+        }
+        for r in viol_res.all()
+    ]
+
+    pending_res = await db.execute(
+        select(DQRule, DataAsset, Domain)
+        .join(DataAsset, DQRule.asset_id == DataAsset.asset_id)
+        .join(Domain, DQRule.domain_id == Domain.domain_id)
+        .where(DQRule.status == "pending_review", DQRule.is_active == True)
+        .order_by(DQRule.severity.desc())
+        .limit(10)
+    )
+    pending = [
+        {
+            "rule_id": r.DQRule.rule_id,
+            "rule_name": r.DQRule.rule_name,
+            "rule_type": r.DQRule.rule_type,
+            "severity": r.DQRule.severity,
+            "table": f"{r.DataAsset.sf_schema_name}.{r.DataAsset.sf_table_name}",
+            "domain": r.Domain.domain_name,
+            "created_by": r.DQRule.created_by,
+            "description": r.DQRule.rule_description,
+        }
+        for r in pending_res.all()
+    ]
+
+    if not violations and not pending:
+        return {"violations": [], "pending_approvals": [], "summary": "No items require attention."}
+
+    sys_queue = (
+        "You are a data governance assistant. For each open violation and pending approval, "
+        "provide a brief suggested action. Return ONLY valid JSON: "
+        '{"violation_actions": {"<violation_id>": "<action>"}, '
+        '"approval_actions": {"<rule_id>": "<action>"}, '
+        '"priority_summary": "<2 sentence summary of what to do first>"}'
+    )
+    prompt = (
+        f"Open violations ({len(violations)}):\n{_j.dumps(violations, default=str)}\n\n"
+        f"Pending approvals ({len(pending)}):\n{_j.dumps(pending, default=str)}"
+    )
+    provider = await get_provider_from_db(provider_name, db)
+    raw = await provider.complete(prompt, sys_queue, max_tokens=1000)
+    try:
+        start = raw.find("{"); end = raw.rfind("}") + 1
+        ai_actions = _j.loads(raw[start:end]) if start >= 0 else {}
+    except Exception:
+        ai_actions = {}
+
+    return {
+        "violations": violations,
+        "pending_approvals": pending,
+        "ai_actions": ai_actions,
+        "summary": ai_actions.get("priority_summary", ""),
+    }
