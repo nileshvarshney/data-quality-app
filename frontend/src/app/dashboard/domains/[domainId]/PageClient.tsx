@@ -357,6 +357,93 @@ export default function DomainDetailPage() {
           })}
         </div>
       </div>
+
+      {/* ── ROW 4: Bottom tray ────────────────────────────────────────── */}
+      <div className="grid px-3 pb-3 gap-3 flex-1 min-h-0" style={{ gridTemplateColumns: '1.6fr 1fr 1.2fr' }}>
+
+        {/* Recent Failures */}
+        <div className="rounded-lg p-3 flex flex-col overflow-hidden" style={card}>
+          <div className="flex items-center justify-between mb-2 shrink-0">
+            <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Recent Failures</span>
+            <Link href={`/runs?domain_id=${domainId}&status=failed`} className="text-[10px] font-medium" style={{ color: '#6366f1' }}>View all →</Link>
+          </div>
+          <div className="flex flex-col gap-2 flex-1 overflow-y-auto min-h-0">
+            {recentFailures.length === 0 ? (
+              <div className="flex-1 flex items-center justify-center">
+                <span className="text-[11px] text-green-500 font-medium">✓ No recent failures</span>
+              </div>
+            ) : recentFailures.slice(0, 6).map((run: any, i: number) => {
+              const sev = run.severity ?? 'low'
+              const { bg, text } = severityStyle(sev)
+              const borderColor = sev === 'critical' ? '#ef4444' : sev === 'high' ? '#f59e0b' : 'var(--border)'
+              const desc = run.rule_name
+                ? `${run.rule_name.replace(/_/g, ' ')} failed${run.subdomain_name ? ` in ${run.subdomain_name}` : ''}`
+                : `Rule execution failed${run.subdomain_name ? ` in ${run.subdomain_name}` : ''}`
+              return (
+                <div key={run.run_id ?? i}
+                  className="pl-2 pb-2 cursor-help"
+                  style={{ borderLeft: `3px solid ${borderColor}`, borderBottom: `1px solid var(--border-sub)` }}>
+                  <div className="text-[11px] font-medium leading-snug" style={{ color: 'var(--text)' }}>{desc}</div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded" style={{ background: bg, color: text }}>{sev}</span>
+                    <span className="text-[9px]" style={{ color: 'var(--text-4)' }}>
+                      {run.subdomain_name ?? '—'} · {run.created_at ? relTime(run.created_at) : '—'}
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* At-Risk Tables */}
+        <div className="rounded-lg p-3 flex flex-col overflow-hidden" style={card}>
+          <span className="text-[10px] font-semibold uppercase tracking-wider mb-2 shrink-0" style={{ color: 'var(--text-3)' }}>Most At-Risk Tables</span>
+          <div className="flex flex-col gap-3 flex-1 overflow-y-auto min-h-0">
+            {atRiskTables.length === 0 ? (
+              <div className="flex-1 flex items-center justify-center">
+                <span className="text-[11px] text-green-500 font-medium">✓ All tables healthy</span>
+              </div>
+            ) : atRiskTables.slice(0, 5).map(t => (
+              <div key={t.table_name + t.domain_name} className="cursor-help">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] font-medium truncate flex-1 mr-2" style={{ color: 'var(--text)' }}>{t.table_name}</span>
+                  <span className="text-[11px] font-bold shrink-0" style={{ color: scoreColor(t.score) }}>
+                    {t.score.toFixed(0)}%{t.score_delta < -0.05 ? ' ↓' : ''}
+                  </span>
+                </div>
+                <div className="w-full h-1.5 rounded overflow-hidden" style={{ background: 'var(--surface-sub)' }}>
+                  <div className="h-full rounded transition-all" style={{ width: `${t.score}%`, background: scoreColor(t.score) }} />
+                </div>
+                <div className="text-[9px] mt-0.5" style={{ color: 'var(--text-4)' }}>
+                  {t.domain_name}{t.score_delta < -0.05 ? ` · ${t.score_delta.toFixed(1)}% this week` : ''}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Top Issues */}
+        <div className="rounded-lg p-3 flex flex-col overflow-hidden" style={card}>
+          <span className="text-[10px] font-semibold uppercase tracking-wider mb-2 shrink-0" style={{ color: 'var(--text-3)' }}>Top Issues</span>
+          <div className="flex flex-col gap-2 flex-1 overflow-y-auto min-h-0">
+            {topIssues.length === 0 ? (
+              <div className="flex-1 flex items-center justify-center">
+                <span className="text-[11px] text-green-500 font-medium">✓ No active issues</span>
+              </div>
+            ) : topIssues.map((issue, i) => (
+              <Link key={i} href={issue.href}
+                className="rounded-lg p-2 block relative hover:opacity-90 transition-opacity"
+                style={{ background: issue.bg, border: `1px solid ${issue.border}` }}>
+                <span className="absolute top-2 right-2 text-[9px] font-bold" style={{ color: issue.color }}>↗</span>
+                <div className="text-[11px] font-semibold leading-snug pr-4" style={{ color: issue.color }}>{issue.title}</div>
+                <div className="text-[9px] mt-0.5" style={{ color: issue.color, opacity: 0.8 }}>{issue.detail}</div>
+              </Link>
+            ))}
+          </div>
+        </div>
+
+      </div>
     </div>
   )
 }
