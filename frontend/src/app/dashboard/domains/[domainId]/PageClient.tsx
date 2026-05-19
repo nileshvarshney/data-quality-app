@@ -3,8 +3,8 @@ import { useEffect, useState, useCallback } from 'react'
 import { useParams, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import {
-  Shield, Database, CheckCircle, XCircle, AlertTriangle,
-  RefreshCw, ChevronRight, Clock, Activity, PlayCircle,
+  Shield, Database, CheckCircle, XCircle,
+  RefreshCw, ChevronRight, Activity,
 } from 'lucide-react'
 import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RTooltip,
@@ -14,35 +14,21 @@ import QualityTrendChart from '@/components/charts/QualityTrendChart'
 import ScoreRing from '@/components/common/ScoreRing'
 import SeverityBadge from '@/components/common/SeverityBadge'
 import Breadcrumbs from '@/components/common/Breadcrumbs'
-import MetricInfo, { METRICS } from '@/components/common/MetricInfo'
 import { useTheme } from '@/components/layout/ThemeProvider'
-import { useTimezone } from '@/contexts/TimezoneContext'
 
 // ── Helpers ───────────────────────────────────────────────────────
 
-function scoreTextColor(s: number) {
-  if (s >= 95) return 'text-green-600'
-  if (s >= 80) return 'text-yellow-600'
-  if (s >= 60) return 'text-orange-500'
-  return 'text-red-600'
+function scoreColor(s: number) {
+  if (s >= 95) return 'text-green-400'
+  if (s >= 80) return 'text-yellow-400'
+  if (s >= 60) return 'text-orange-400'
+  return 'text-red-400'
 }
-function scoreFill(s: number) {
-  if (s >= 95) return '#22c55e'
-  if (s >= 80) return '#f59e0b'
-  if (s >= 60) return '#f97316'
-  return '#ef4444'
-}
-function scoreLabel(s: number) {
-  if (s >= 95) return 'Excellent'
-  if (s >= 80) return 'Good'
-  if (s >= 60) return 'Warning'
-  return 'Critical'
-}
-function scoreBadgeClass(s: number) {
-  if (s >= 95) return 'bg-green-50 text-green-700 border-green-200'
-  if (s >= 80) return 'bg-yellow-50 text-yellow-700 border-yellow-200'
-  if (s >= 60) return 'bg-orange-50 text-orange-700 border-orange-200'
-  return 'bg-red-50 text-red-700 border-red-200'
+function scoreBorderColor(s: number) {
+  if (s >= 95) return 'border-green-500'
+  if (s >= 80) return 'border-yellow-500'
+  if (s >= 60) return 'border-orange-500'
+  return 'border-red-500'
 }
 function relTime(ts: string): string {
   const diff = Math.floor((Date.now() - new Date(ts).getTime()) / 1000)
@@ -50,42 +36,6 @@ function relTime(ts: string): string {
   if (diff < 3600)  return `${Math.floor(diff / 60)}m ago`
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
   return `${Math.floor(diff / 86400)}d ago`
-}
-
-// ── Subdomain card ────────────────────────────────────────────────
-
-function SubdomainCard({ sub, trackColor }: { sub: any; trackColor: string }) {
-  const score = sub.quality_score ?? 0
-  return (
-    <Link
-      href={`/dashboard/subdomains/${sub.subdomain_id}`}
-      className="bg-white rounded-xl border border-gray-200 p-4 hover:border-blue-300 hover:shadow-md transition-all group block"
-    >
-      <div className="flex items-start justify-between gap-2 mb-3">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-gray-900 group-hover:text-blue-700 transition-colors truncate">
-            {sub.subdomain_name}
-          </p>
-          <span className={`inline-block mt-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${scoreBadgeClass(score)}`}>
-            {scoreLabel(score)}
-          </span>
-        </div>
-        <div className="relative shrink-0">
-          <ScoreRing score={score} size={56} strokeWidth={6} trackColor={trackColor} />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className={`text-[11px] font-bold ${scoreTextColor(score)}`}>{score.toFixed(0)}%</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-        <span className="flex items-center gap-1 text-[11px] text-gray-400">
-          <Shield size={10} />{sub.total_rules} rules
-        </span>
-        <ChevronRight size={11} className="text-gray-300 group-hover:text-blue-500 transition-colors" />
-      </div>
-    </Link>
-  )
 }
 
 // ── Page ──────────────────────────────────────────────────────────
@@ -96,16 +46,14 @@ export default function DomainDetailPage() {
   const domainId = (_domainId && _domainId !== '__placeholder__')
     ? _domainId
     : pathname.split('/').filter(Boolean).pop() ?? ''
-  const { theme }    = useTheme()
-  const { formatTime } = useTimezone()
-  const trackColor   = theme === 'dark' ? '#334155' : '#e2e8f0'
+  const { theme } = useTheme()
+  const trackColor = theme === 'dark' ? '#334155' : '#e2e8f0'
 
-  const [data, setData]                 = useState<any>(null)
+  const [data, setData]                     = useState<any>(null)
   const [recentFailures, setRecentFailures] = useState<any[]>([])
-  const [loading, setLoading]           = useState(true)
-  const [refreshing, setRefreshing]     = useState(false)
-  const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date())
-  const [error, setError]               = useState('')
+  const [loading, setLoading]               = useState(true)
+  const [refreshing, setRefreshing]         = useState(false)
+  const [error, setError]                   = useState('')
 
   const loadAll = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true)
@@ -118,7 +66,6 @@ export default function DomainDetailPage() {
       if (dRes.status === 'fulfilled') setData(dRes.value.data)
       else setError('Failed to load domain data')
       if (rRes.status === 'fulfilled') setRecentFailures(Array.isArray(rRes.value.data) ? rRes.value.data : [])
-      setLastRefreshed(new Date())
     } catch {
       setError('Failed to load domain data')
     } finally {
@@ -129,35 +76,47 @@ export default function DomainDetailPage() {
 
   useEffect(() => { loadAll() }, [loadAll])
 
+  // ── Loading ────────────────────────────────────────────────────
+
   if (loading) return (
-    <div className="p-6 space-y-4">
-      <div className="h-6 w-48 bg-gray-200 rounded animate-pulse" />
-      <div className="h-40 bg-gray-200 rounded-xl animate-pulse" />
-      <div className="grid grid-cols-4 gap-4">
-        {[...Array(4)].map((_, i) => <div key={i} className="h-24 bg-gray-200 rounded-xl animate-pulse" />)}
+    <div className="p-4 space-y-3">
+      <div className="h-4 w-40 bg-gray-200 rounded animate-pulse" />
+      <div className="h-8 w-56 bg-gray-200 rounded animate-pulse" />
+      <div className="grid grid-cols-4 gap-2">
+        {[...Array(4)].map((_, i) => <div key={i} className="h-16 bg-gray-200 rounded-lg animate-pulse" />)}
       </div>
+      <div className="h-64 bg-gray-200 rounded-lg animate-pulse" />
     </div>
   )
 
+  // ── Error ──────────────────────────────────────────────────────
+
   if (error || !data) return (
-    <div className="p-8">
+    <div className="p-6">
       <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">
         {error || 'Domain not found'}
       </div>
     </div>
   )
 
-  const score    = data.quality_score ?? 0
-  const passTotal = (data.passed_rules ?? 0) + (data.failed_rules ?? 0)
-  const passRate  = passTotal > 0 ? (data.passed_rules / passTotal) * 100 : 0
-  const donut     = [
-    { name: 'Passed', value: data.passed_rules ?? 0 },
-    { name: 'Failed', value: data.failed_rules ?? 0 },
+  // ── Derived values ─────────────────────────────────────────────
+
+  const score        = data.quality_score ?? 0
+  const passedRules  = data.passed_rules ?? 0
+  const failedRules  = data.failed_rules ?? 0
+  const totalRules   = data.total_rules ?? 0
+  const tablesCount  = data.subdomains?.reduce((s: number, sub: any) => s + (sub.total_assets ?? 0), 0) ?? 0
+  const subdomains   = data.subdomains ?? []
+  const failures     = recentFailures.slice(0, 5)
+
+  const donut = [
+    { name: 'Passed', value: passedRules },
+    { name: 'Failed', value: failedRules },
   ]
-  const refreshedAt = formatTime(lastRefreshed)
+  const passTotal = passedRules + failedRules
 
   return (
-    <div className="p-6 space-y-6 max-w-[1600px]">
+    <div className="flex flex-col gap-2 p-4 h-full max-w-[1600px]">
 
       {/* Breadcrumb */}
       <Breadcrumbs items={[
@@ -165,283 +124,242 @@ export default function DomainDetailPage() {
         { label: data.domain_name },
       ]} />
 
-      {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{data.domain_name}</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Domain quality dashboard</p>
-        </div>
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <div className="flex items-center gap-1.5 text-xs text-gray-400">
-            <Clock size={12} />
-            <span>Updated {refreshedAt}</span>
-          </div>
+      {/* Header row */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <h1 className="text-lg font-semibold text-gray-900">{data.domain_name}</h1>
+
+        {/* Quality score badge */}
+        <span className={`inline-flex items-center gap-1 bg-gray-800 rounded px-2 py-0.5 text-sm font-semibold ${scoreColor(score)}`}>
+          {score > 0 ? `${score.toFixed(1)}%` : '—'}
+        </span>
+
+        <div className="ml-auto flex items-center gap-2">
           <Link
             href={`/runs?domain_id=${domainId}`}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:border-blue-300 hover:text-blue-600 transition-all"
+            className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:border-blue-300 hover:text-blue-600 transition-all"
           >
-            <PlayCircle size={12} /> Execution Logs
+            View Logs
           </Link>
           <button
             onClick={() => loadAll(true)}
             disabled={refreshing}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:border-blue-400 hover:text-blue-600 transition-all disabled:opacity-40"
+            className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:border-blue-400 hover:text-blue-600 transition-all disabled:opacity-40"
           >
-            <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />
+            <RefreshCw size={11} className={refreshing ? 'animate-spin' : ''} />
             Refresh
           </button>
         </div>
       </div>
 
-      {/* Hero: score ring + KPIs */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+      {/* KPI Strip */}
+      <div className="grid grid-cols-4 gap-2">
 
-        {/* Score ring */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-6 flex items-center gap-6">
-          <div className="relative shrink-0">
-            <ScoreRing score={score} size={120} strokeWidth={10} trackColor={trackColor} />
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className={`text-2xl font-black ${scoreTextColor(score)}`}>
-                {score > 0 ? `${score.toFixed(1)}%` : '—'}
-              </span>
-            </div>
+        {/* Active Rules */}
+        <div className="bg-white rounded-lg border border-gray-200 px-3 py-2 flex items-center gap-2">
+          <div className="p-1.5 rounded-md bg-indigo-50 shrink-0">
+            <Shield size={13} className="text-indigo-600" />
           </div>
-          <div className="space-y-2 min-w-0">
-            <div>
-              <div className="flex items-center gap-1.5">
-                <p className="text-[11px] text-gray-400 uppercase tracking-widest font-medium">Quality Score</p>
-                <MetricInfo metric={METRICS.qualityScore} position="right" />
-              </div>
-              <p className={`text-xl font-bold mt-0.5 ${scoreTextColor(score)}`}>{scoreLabel(score)}</p>
-            </div>
-            <span className={`inline-block text-xs font-semibold px-2.5 py-1 rounded-full border ${scoreBadgeClass(score)}`}>
-              {score >= 95 ? 'SLA Met' : score >= 80 ? 'Within Threshold' : 'Below SLA'}
-            </span>
-            <div className="pt-2 border-t border-gray-100">
-              <p className="text-[11px] text-gray-400">14-day trend</p>
-              <QualityTrendChart data={data.quality_trend || []} height={36} mini />
-            </div>
+          <div className="min-w-0">
+            <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium leading-none">Active Rules</p>
+            <p className="text-xl font-black text-gray-900 tabular-nums leading-tight">{totalRules}</p>
           </div>
         </div>
 
-        {/* KPI cards */}
-        <div className="lg:col-span-3 grid grid-cols-2 gap-3">
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <div className="flex items-center gap-2 mb-1.5">
-              <div className="p-1.5 rounded-lg bg-indigo-50"><Shield size={14} className="text-indigo-600" /></div>
-              <div className="flex items-center gap-1">
-                <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Active Rules</p>
-                <MetricInfo metric={METRICS.activeRules} position="top" />
-              </div>
-            </div>
-            <p className="text-3xl font-black text-gray-900 tabular-nums">{data.total_rules ?? 0}</p>
-            <p className="text-[11px] text-gray-400 mt-1">data quality checks</p>
+        {/* Tables Monitored */}
+        <div className="bg-white rounded-lg border border-gray-200 px-3 py-2 flex items-center gap-2">
+          <div className="p-1.5 rounded-md bg-purple-50 shrink-0">
+            <Database size={13} className="text-purple-600" />
           </div>
-
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <div className="flex items-center gap-2 mb-1.5">
-              <div className="p-1.5 rounded-lg bg-purple-50"><Database size={14} className="text-purple-600" /></div>
-              <div className="flex items-center gap-1">
-                <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Tables</p>
-                <MetricInfo metric={METRICS.tablesMonitored} position="top" />
-              </div>
-            </div>
-            <p className="text-3xl font-black text-gray-900 tabular-nums">
-              {data.subdomains?.reduce((s: number, sub: any) => s + (sub.total_assets ?? 0), 0) ?? '—'}
-            </p>
-            <p className="text-[11px] text-gray-400 mt-1">Snowflake tables monitored</p>
+          <div className="min-w-0">
+            <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium leading-none">Tables Monitored</p>
+            <p className="text-xl font-black text-gray-900 tabular-nums leading-tight">{tablesCount}</p>
           </div>
+        </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <div className="flex items-center gap-2 mb-1.5">
-              <div className="p-1.5 rounded-lg bg-green-50"><CheckCircle size={14} className="text-green-600" /></div>
-              <div className="flex items-center gap-1">
-                <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Passed Today</p>
-                <MetricInfo metric={METRICS.passedToday} position="top" />
-              </div>
-            </div>
-            <p className="text-3xl font-black text-gray-900 tabular-nums">{data.passed_rules ?? 0}</p>
-            <p className="text-[11px] text-gray-400 mt-1">rules passed all checks</p>
+        {/* Passed Today */}
+        <div className="bg-white rounded-lg border border-gray-200 px-3 py-2 flex items-center gap-2">
+          <div className="p-1.5 rounded-md bg-green-50 shrink-0">
+            <CheckCircle size={13} className="text-green-600" />
           </div>
+          <div className="min-w-0">
+            <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium leading-none">Passed Today</p>
+            <p className="text-xl font-black text-green-600 tabular-nums leading-tight">{passedRules}</p>
+          </div>
+        </div>
 
-          <div className={`bg-white rounded-xl border p-4 ${(data.failed_rules ?? 0) > 0 ? 'border-red-200' : 'border-gray-200'}`}>
-            <div className="flex items-center gap-2 mb-1.5">
-              <div className="p-1.5 rounded-lg bg-red-50"><XCircle size={14} className="text-red-500" /></div>
-              <div className="flex items-center gap-1">
-                <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Failed Today</p>
-                <MetricInfo metric={METRICS.failedToday} position="top" />
-              </div>
-            </div>
-            <p className={`text-3xl font-black tabular-nums ${(data.failed_rules ?? 0) > 0 ? 'text-red-600' : 'text-gray-900'}`}>
-              {data.failed_rules ?? 0}
-            </p>
-            <p className="text-[11px] text-gray-400 mt-1">rules need attention</p>
+        {/* Failed Today */}
+        <div className={`bg-white rounded-lg border px-3 py-2 flex items-center gap-2 ${failedRules > 0 ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}>
+          <div className={`p-1.5 rounded-md shrink-0 ${failedRules > 0 ? 'bg-red-100' : 'bg-red-50'}`}>
+            <XCircle size={13} className="text-red-500" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium leading-none">Failed Today</p>
+            <p className={`text-xl font-black tabular-nums leading-tight ${failedRules > 0 ? 'text-red-600' : 'text-gray-900'}`}>{failedRules}</p>
           </div>
         </div>
       </div>
 
-      {/* Today's pass rate strip */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Activity size={15} className="text-blue-600" />
-            <p className="text-sm font-semibold text-gray-900">Today's Pass Rate</p>
-          </div>
-          <span className={`text-sm font-bold ${scoreTextColor(passRate)}`}>{passRate.toFixed(0)}%</span>
-        </div>
-        <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
-          <div
-            className="h-full rounded-full transition-all duration-700"
-            style={{ width: `${passRate}%`, backgroundColor: scoreFill(passRate) }}
-          />
-        </div>
-        <div className="flex justify-between text-[11px] text-gray-400 mt-1.5">
-          <span>{data.passed_rules ?? 0} passed</span>
-          <span>{passTotal} total executed</span>
-          <span>{data.failed_rules ?? 0} failed</span>
-        </div>
-      </div>
+      {/* Body: 3fr / 2fr */}
+      <div className="grid gap-2 min-h-0" style={{ gridTemplateColumns: '3fr 2fr' }}>
 
-      {/* Subdomain grid */}
-      {(data.subdomains || []).length > 0 && (
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-xs font-semibold uppercase tracking-widest text-gray-400">Subdomain Health</p>
+        {/* Left: Subdomain health list */}
+        <div className="bg-white rounded-lg border border-gray-200 flex flex-col min-h-0">
+          <div className="px-3 py-2 border-b border-gray-100 shrink-0">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Subdomain Health</p>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-            {data.subdomains.map((sub: any) => (
-              <SubdomainCard key={sub.subdomain_id} sub={sub} trackColor={trackColor} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Charts row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-
-        {/* 14-day area trend */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-sm font-semibold text-gray-900">Quality Score Trend</h3>
-              <p className="text-[11px] text-gray-400 mt-0.5">14-day rolling · green = SLA 95%, amber = warning 80%</p>
+          {subdomains.length === 0 ? (
+            <div className="flex-1 flex items-center justify-center text-xs text-gray-400 p-4">
+              No subdomains configured
             </div>
-          </div>
-          <QualityTrendChart data={data.quality_trend || []} height={220} area />
-        </div>
-
-        {/* Rules donut */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <div className="mb-4">
-            <h3 className="text-sm font-semibold text-gray-900">Rules Today</h3>
-            <p className="text-[11px] text-gray-400 mt-0.5">Passed vs. Failed</p>
-          </div>
-          {passTotal > 0 ? (
-            <>
-              <ResponsiveContainer width="100%" height={160}>
-                <PieChart>
-                  <Pie
-                    data={donut}
-                    cx="50%" cy="50%"
-                    innerRadius={48} outerRadius={68}
-                    dataKey="value"
-                    paddingAngle={3}
-                    startAngle={90} endAngle={-270}
-                  >
-                    <Cell fill="#22c55e" />
-                    <Cell fill="#ef4444" />
-                  </Pie>
-                  <RTooltip formatter={(v: number, name: string) => [`${v} rules`, name]} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="flex justify-center gap-5 mt-1">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-green-500 shrink-0" />
-                  <span className="text-xs text-gray-600">Passed <strong>{data.passed_rules ?? 0}</strong></span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-red-500 shrink-0" />
-                  <span className="text-xs text-gray-600">Failed <strong>{data.failed_rules ?? 0}</strong></span>
-                </div>
-              </div>
-            </>
           ) : (
-            <div className="h-[160px] flex flex-col items-center justify-center gap-2 text-gray-400">
-              <Activity size={28} className="text-gray-300" />
-              <p className="text-sm">No executions today</p>
+            <div className="overflow-y-auto flex-1">
+              {subdomains.map((sub: any) => {
+                const subScore = sub.quality_score ?? 0
+                return (
+                  <Link
+                    key={sub.subdomain_id}
+                    href={`/dashboard/subdomains/${sub.subdomain_id}`}
+                    className="flex items-center gap-2 px-3 hover:bg-gray-50 transition-colors group border-b border-gray-50 last:border-0"
+                    style={{ minHeight: 40 }}
+                  >
+                    {/* Score ring */}
+                    <div className="relative shrink-0">
+                      <ScoreRing score={subScore} size={36} strokeWidth={4} trackColor={trackColor} />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className={`text-[9px] font-bold ${scoreColor(subScore)}`}>{subScore.toFixed(0)}%</span>
+                      </div>
+                    </div>
+
+                    {/* Name */}
+                    <span className="flex-1 text-xs font-medium text-gray-800 group-hover:text-blue-700 transition-colors truncate">
+                      {sub.subdomain_name}
+                    </span>
+
+                    {/* Pass/fail counts */}
+                    <div className="flex items-center gap-2 shrink-0 text-[10px]">
+                      <span className="text-green-600 font-semibold">{sub.passed_rules ?? 0}P</span>
+                      <span className="text-red-500 font-semibold">{sub.failed_rules ?? 0}F</span>
+                    </div>
+
+                    <ChevronRight size={11} className="text-gray-300 group-hover:text-blue-500 transition-colors shrink-0" />
+                  </Link>
+                )
+              })}
             </div>
           )}
         </div>
+
+        {/* Right: Trend chart + Donut */}
+        <div className="flex flex-col gap-2 min-h-0">
+
+          {/* Quality Trend Chart */}
+          <div className="bg-white rounded-lg border border-gray-200 p-3 flex-1 min-h-0">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-1">Quality Trend (14-day)</p>
+            <QualityTrendChart data={data.quality_trend || []} height={140} area />
+          </div>
+
+          {/* Pass/Fail Donut */}
+          <div className="bg-white rounded-lg border border-gray-200 p-3 shrink-0">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-1">Rules Today</p>
+            {passTotal > 0 ? (
+              <div className="flex items-center gap-3">
+                <ResponsiveContainer width={72} height={72}>
+                  <PieChart>
+                    <Pie
+                      data={donut}
+                      cx="50%" cy="50%"
+                      innerRadius={24} outerRadius={34}
+                      dataKey="value"
+                      paddingAngle={2}
+                      startAngle={90} endAngle={-270}
+                    >
+                      <Cell fill="#22c55e" />
+                      <Cell fill="#ef4444" />
+                    </Pie>
+                    <RTooltip formatter={(v: number, name: string) => [`${v} rules`, name]} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
+                    <span className="text-xs text-gray-600">Passed <strong>{passedRules}</strong></span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
+                    <span className="text-xs text-gray-600">Failed <strong>{failedRules}</strong></span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="h-16 flex items-center justify-center gap-2 text-gray-400">
+                <Activity size={18} className="text-gray-300" />
+                <p className="text-xs">No executions today</p>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* Recent failures */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <div>
-            <h3 className="text-sm font-semibold text-gray-900">Recent Failures</h3>
-            <p className="text-[11px] text-gray-400 mt-0.5">Latest failing rule executions in this domain</p>
+      {/* Failures strip */}
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shrink-0">
+        <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Recent Failures</p>
+            {failures.length > 0 && (
+              <span className="bg-red-100 text-red-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{failures.length}</span>
+            )}
           </div>
-          <Link href={`/runs?domain_id=${domainId}&status=failed`} className="flex items-center gap-1 text-xs text-blue-600 hover:underline">
-            View all <ChevronRight size={12} />
+          <Link
+            href={`/runs?domain_id=${domainId}&status=failed`}
+            className="text-[11px] text-blue-600 hover:underline flex items-center gap-0.5"
+          >
+            View all <ChevronRight size={11} />
           </Link>
         </div>
 
-        {recentFailures.length === 0 ? (
-          <div className="px-6 py-10 text-center">
-            <CheckCircle size={36} className="mx-auto mb-2 text-green-400" />
-            <p className="text-sm font-medium text-gray-600">No recent failures in this domain</p>
-            <p className="text-xs text-gray-400 mt-1">All monitored rules are passing</p>
+        {failures.length === 0 ? (
+          <div className="px-3 py-3 text-xs text-green-600 flex items-center gap-1.5">
+            <CheckCircle size={13} className="text-green-500" />
+            No recent failures
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-xs">
               <thead>
                 <tr className="bg-gray-50 text-[10px] text-gray-400 uppercase tracking-widest border-b border-gray-100">
-                  <th className="px-5 py-2.5 text-left font-semibold">Rule</th>
-                  <th className="px-4 py-2.5 text-left font-semibold">Table</th>
-                  <th className="px-4 py-2.5 text-left font-semibold">Subdomain</th>
-                  <th className="px-4 py-2.5 text-left font-semibold">Severity</th>
-                  <th className="px-4 py-2.5 text-left font-semibold">Score</th>
-                  <th className="px-4 py-2.5 text-left font-semibold">Failed Rows</th>
-                  <th className="px-4 py-2.5 text-left font-semibold">When</th>
+                  <th className="px-3 py-1.5 text-left font-semibold">Rule</th>
+                  <th className="px-3 py-1.5 text-left font-semibold">Table</th>
+                  <th className="px-3 py-1.5 text-left font-semibold">Subdomain</th>
+                  <th className="px-3 py-1.5 text-left font-semibold">Sev</th>
+                  <th className="px-3 py-1.5 text-left font-semibold">When</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
-                {recentFailures.map((run: any, i: number) => (
+              <tbody className="divide-y divide-gray-50">
+                {failures.map((run: any, i: number) => (
                   <tr key={run.run_id ?? i} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-5 py-3">
-                      <span className="text-xs font-medium text-gray-900 truncate max-w-[180px] block">
+                    <td className="px-3 py-1.5">
+                      <span className="font-medium text-gray-900 truncate max-w-[160px] block">
                         {run.rule_name ?? run.rule_id?.slice(0, 12) ?? '—'}
                       </span>
                       {run.rule_type && (
                         <span className="text-[10px] text-gray-400">{run.rule_type.replace(/_/g, ' ')}</span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="text-xs text-gray-700 font-medium">
+                    <td className="px-3 py-1.5">
+                      <span className="text-gray-700 font-medium truncate max-w-[120px] block">
                         {run.sf_table_name ?? '—'}
                       </span>
                       {run.sf_schema_name && (
                         <span className="text-[10px] text-gray-400 block">{run.sf_schema_name}</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
+                    <td className="px-3 py-1.5 text-gray-500 whitespace-nowrap">
                       {run.subdomain_name ?? '—'}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-1.5">
                       <SeverityBadge severity={run.severity ?? 'low'} />
                     </td>
-                    <td className="px-4 py-3">
-                      {run.quality_score != null ? (
-                        <span className={`text-xs font-bold ${run.quality_score < 60 ? 'text-red-600' : run.quality_score < 80 ? 'text-orange-500' : 'text-yellow-600'}`}>
-                          {run.quality_score.toFixed(0)}%
-                        </span>
-                      ) : <span className="text-xs text-gray-400">—</span>}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-gray-500 tabular-nums">
-                      {run.failed_rows_count != null ? run.failed_rows_count.toLocaleString() : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-[11px] text-gray-400 whitespace-nowrap">
+                    <td className="px-3 py-1.5 text-gray-400 whitespace-nowrap">
                       {run.created_at ? relTime(run.created_at) : '—'}
                     </td>
                   </tr>
