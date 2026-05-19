@@ -172,7 +172,106 @@ export default function DomainDetailPage() {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden" style={{ background: 'var(--bg)', color: 'var(--text)' }}>
-      {/* Rows rendered in Tasks 5–8 */}
+      {/* ── ROW 0: Status bar ─────────────────────────────────────────── */}
+      <div className="flex items-center justify-between py-1.5 px-4 shrink-0"
+        style={{ ...card, borderRadius: 0, borderLeft: 'none', borderRight: 'none', borderTop: 'none' }}>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold"
+            style={{ background: healthy ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)', border: `1px solid ${healthy ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`, color: healthy ? '#22c55e' : '#ef4444' }}>
+            <span className={`w-1.5 h-1.5 rounded-full ${healthy ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`} />
+            {healthy ? 'All Systems Normal' : 'Issues Detected'}
+          </div>
+          <Breadcrumbs items={[
+            { label: 'Global',  href: '/dashboard/global' },
+            { label: 'Domains', href: '/dashboard/domains' },
+            { label: data.domain_name },
+          ]} />
+          <div className="flex items-center gap-1 text-[11px]" style={{ color: 'var(--text-3)' }}>
+            <Clock size={11} />
+            <span>Updated {formatTime(lastRefreshed)}</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Link href={`/runs?domain_id=${domainId}`}
+            className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded transition-colors"
+            style={{ background: 'var(--surface-sub)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
+            View Logs
+          </Link>
+          <a href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/dashboard/export/runs?domain_id=${domainId}&days=30`}
+            download
+            className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded transition-colors"
+            style={{ background: 'var(--surface-sub)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
+            <Download size={10} /> Export CSV
+          </a>
+          <button onClick={() => loadAll(true)} disabled={refreshing}
+            className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded transition-colors disabled:opacity-40"
+            style={{ background: 'var(--surface-sub)', border: '1px solid var(--border)', color: 'var(--text-2)' }}>
+            <RefreshCw size={10} className={refreshing ? 'animate-spin' : ''} /> Refresh
+          </button>
+        </div>
+      </div>
+
+      {/* ── ROW 1: Hero score (1/3) + 6 KPI chips (2/3) ──────────────── */}
+      <div className="grid px-3 pt-3 pb-1.5 gap-3 shrink-0" style={{ gridTemplateColumns: '1fr 2fr' }}>
+
+        <div className="rounded-xl p-4 flex flex-col items-center justify-center gap-2 relative"
+          style={{ background: 'linear-gradient(145deg,#f0fdf4,#dcfce7,#bbf7d0)', border: '2px solid #86efac', boxShadow: '0 6px 20px rgba(34,197,94,0.18)' }}>
+          <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: '#15803d' }}>Domain Quality Score</span>
+          <span className="font-black leading-none tabular-nums" style={{ fontSize: '3rem', color: '#15803d', letterSpacing: '-2px' }}>
+            {score > 0 ? `${score.toFixed(1)}%` : '—'}
+          </span>
+          {Math.abs(scoreDelta) >= 0.05 && (
+            <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full"
+              style={{ background: '#bbf7d0', color: '#15803d', border: '1px solid #86efac' }}>
+              {scoreDelta > 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+              {scoreDelta > 0 ? '+' : ''}{scoreDelta.toFixed(1)}% vs yesterday
+            </span>
+          )}
+        </div>
+
+        <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(3,1fr)', gridTemplateRows: '1fr 1fr' }}>
+          <div className="rounded-lg flex flex-col items-center justify-center gap-1 py-2" style={card}>
+            <Globe size={12} style={{ color: 'var(--text-4)' }} />
+            <span className="text-[9px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Subdomains</span>
+            <span className="text-2xl font-black tabular-nums" style={{ color: 'var(--text)' }}>{subdomains.length}</span>
+            <span className="text-[9px]" style={{ color: 'var(--text-4)' }}>monitored</span>
+          </div>
+          <div className="rounded-lg flex flex-col items-center justify-center gap-1 py-2" style={card}>
+            <Shield size={12} style={{ color: 'var(--text-4)' }} />
+            <span className="text-[9px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Active Rules</span>
+            <span className="text-2xl font-black tabular-nums" style={{ color: 'var(--text)' }}>{data.total_rules ?? 0}</span>
+            <span className="text-[9px]" style={{ color: 'var(--text-4)' }}>configured</span>
+          </div>
+          <div className="rounded-lg flex flex-col items-center justify-center gap-1 py-2"
+            style={{ ...card, background: 'rgba(34,197,94,0.06)', borderColor: 'rgba(34,197,94,0.25)' }}>
+            <CheckCircle size={12} className="text-green-500" />
+            <span className="text-[9px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Passed</span>
+            <span className="text-2xl font-black tabular-nums text-green-500">{data.passed_rules ?? 0}</span>
+            <span className="text-[9px] font-semibold text-green-500">today</span>
+          </div>
+          <div className="rounded-lg flex flex-col items-center justify-center gap-1 py-2"
+            style={{ ...card, background: 'rgba(239,68,68,0.06)', borderColor: 'rgba(239,68,68,0.25)' }}>
+            <XCircle size={12} className="text-red-500" />
+            <span className="text-[9px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Failed</span>
+            <span className="text-2xl font-black tabular-nums text-red-500">{data.failed_rules ?? 0}</span>
+            <span className="text-[9px] font-semibold text-red-500">today</span>
+          </div>
+          <div className="rounded-lg flex flex-col items-center justify-center gap-1 py-2"
+            style={{ ...card, background: 'rgba(147,51,234,0.06)', borderColor: 'rgba(147,51,234,0.25)' }}>
+            <Activity size={12} className="text-purple-500" />
+            <span className="text-[9px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Critical</span>
+            <span className="text-2xl font-black tabular-nums text-purple-500">{data.critical_failures ?? 0}</span>
+            <span className="text-[9px] font-semibold text-purple-500">detected</span>
+          </div>
+          <div className="rounded-lg flex flex-col items-center justify-center gap-1 py-2"
+            style={{ ...card, background: 'rgba(234,88,12,0.06)', borderColor: 'rgba(234,88,12,0.25)' }}>
+            <AlertTriangle size={12} className="text-orange-500" />
+            <span className="text-[9px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>At-Risk Subs</span>
+            <span className="text-2xl font-black tabular-nums text-orange-500">{atRiskSubs}</span>
+            <span className="text-[9px] font-semibold text-orange-500">score &lt; 80%</span>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
