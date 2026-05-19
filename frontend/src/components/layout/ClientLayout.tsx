@@ -19,7 +19,16 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const [badges, setBadges]             = useState<Record<string, number>>({})
   const isPublic = PUBLIC_PATHS.some(p => pathname.startsWith(p))
 
-  // ── Auth + restore last open section ──────────────────────────────────────
+  // ── Restore last open section (mount only) ───────────────────────────────
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(KEY_OPEN_SECTION)
+      if (stored) setOpenSection(stored)
+    } catch {}
+  }, [])
+
+  // ── Auth + set ready ───────────────────────────────────────────────────────
 
   useEffect(() => {
     const token = localStorage.getItem('access_token')
@@ -29,10 +38,6 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       return
     }
     setReady(true)
-    try {
-      const stored = localStorage.getItem(KEY_OPEN_SECTION)
-      if (stored) setOpenSection(stored)
-    } catch {}
   }, [pathname, isPublic, router])
 
   // ── Badge polling — 90s interval ─────────────────────────────────────────
