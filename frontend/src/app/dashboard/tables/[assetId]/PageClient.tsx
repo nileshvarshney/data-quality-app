@@ -224,6 +224,7 @@ export default function TableDashboardPage() {
   const [colDocsResult,    setColDocsResult]     = useState<{documented:number,skipped:number}|null>(null)
   const [remediationLoading, setRemediationLoading] = useState(false)
   const [remediationPlan,    setRemediationPlan]    = useState<any | null>(null)
+  const [aiError,            setAiError]            = useState<string | null>(null)
 
   const tableLastProfiledAt = useMemo(
     () => columns
@@ -283,34 +284,41 @@ export default function TableDashboardPage() {
 
   const handleGenerateDescription = async () => {
     setDescLoading(true)
+    setAiError(null)
     try {
       const res = await aiApi.generateDescription(assetId)
       setDescText(res.data.description)
-      // also refresh data so header reflects updated description
       await loadAll(true)
-    } catch { setDescText(null) }
-    finally { setDescLoading(false) }
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail || 'LLM unavailable — check that Ollama is running or an API key is configured in Settings.'
+      setAiError(`Generate Description failed: ${detail}`)
+    } finally { setDescLoading(false) }
   }
 
   const handleGenerateColumnDocs = async () => {
     setColDocsLoading(true)
+    setAiError(null)
     try {
       const res = await aiApi.generateColumnDocs(assetId)
       setColDocsResult(res.data)
-      // refresh schema columns to show new descriptions
       setColFetched(false)
-    } catch { setColDocsResult(null) }
-    finally { setColDocsLoading(false) }
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail || 'LLM unavailable — check that Ollama is running or an API key is configured in Settings.'
+      setAiError(`Generate Column Docs failed: ${detail}`)
+    } finally { setColDocsLoading(false) }
   }
 
   const handleRemediationPlan = async () => {
     setRemediationLoading(true)
     setRemediationPlan(null)
+    setAiError(null)
     try {
       const res = await aiApi.remediationPlan(assetId)
       setRemediationPlan(res.data)
-    } catch { setRemediationPlan(null) }
-    finally { setRemediationLoading(false) }
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail || 'LLM unavailable — check that Ollama is running or an API key is configured in Settings.'
+      setAiError(`Remediation Plan failed: ${detail}`)
+    } finally { setRemediationLoading(false) }
   }
 
   const triggerProfiling = async () => {
@@ -470,6 +478,17 @@ export default function TableDashboardPage() {
 
       {/* ── Quality tab ─────────────────────────────────────────── */}
       {activeTab === 'quality' && <>
+
+      {/* AI error banner */}
+      {aiError && (
+        <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+          <AlertTriangle size={15} className="text-red-500 shrink-0 mt-0.5" />
+          <p className="text-sm text-red-700 flex-1">{aiError}</p>
+          <button onClick={() => setAiError(null)} className="text-red-400 hover:text-red-600 shrink-0">
+            <X size={13} />
+          </button>
+        </div>
+      )}
 
       {/* AI-generated description banner */}
       {descText && (
