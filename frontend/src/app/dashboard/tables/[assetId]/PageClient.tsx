@@ -3,10 +3,10 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useParams, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import {
-  Shield, CheckCircle, XCircle, Activity, Clock,
+  Shield, CheckCircle, XCircle, Clock,
   ChevronRight, RefreshCw, Play, AlertTriangle, Loader2,
   FileText, Bot, Database,
-  Columns, Star, Tag, BookOpen, Zap, Pencil, EyeOff, TrendingUp, GitFork, GitCompare,
+  Columns, Tag, BookOpen, Zap, EyeOff, TrendingUp, GitFork, GitCompare,
   Sparkles, Wrench, X,
 } from 'lucide-react'
 import { dashboardApi, executionsApi, aiApi, assetsApi, glossaryApi } from '@/services/apiClient'
@@ -27,10 +27,6 @@ import { SchemaDriftTab } from '@/components/schema-drift/SchemaDriftTab'
 function scoreTextColor(s: number) {
   if (s >= 95) return 'text-green-600'; if (s >= 80) return 'text-yellow-600'
   if (s >= 60) return 'text-orange-500'; return 'text-red-600'
-}
-function scoreFill(s: number) {
-  if (s >= 95) return '#22c55e'; if (s >= 80) return '#f59e0b'
-  if (s >= 60) return '#f97316'; return '#ef4444'
 }
 function scoreLabel(s: number) {
   if (s >= 95) return 'Excellent'; if (s >= 80) return 'Good'
@@ -203,7 +199,7 @@ export default function TableDashboardPage() {
   const [expandedRun, setExpandedRun] = useState<string | null>(null)
 
   // Tabs
-  const [activeTab, setActiveTab] = useState<'quality' | 'schema' | 'lineage' | 'drift' | 'trends'>('quality')
+  const [activeTab, setActiveTab] = useState<'quality' | 'schema' | 'rules' | 'lineage' | 'drift' | 'trends'>('quality')
   const [driftCount, setDriftCount] = useState(0)
   const [columns, setColumns]   = useState<any[]>([])
   const [colLoading, setColLoading] = useState(false)
@@ -384,8 +380,6 @@ export default function TableDashboardPage() {
   if (!data) return <div className="p-8 text-gray-500">Table not found</div>
 
   const score     = data.quality_score ?? 0
-  const passTotal = (data.passed_rules ?? 0) + (data.failed_rules ?? 0) + (data.warning_rules ?? 0)
-  const passRate  = passTotal > 0 ? (data.passed_rules / passTotal) * 100 : 0
   const failedRules = (data.rules || []).filter((r: any) => r.status === 'failed' || r.status === 'error')
   const refreshedAt = formatTime(lastRefreshed)
 
@@ -453,6 +447,7 @@ export default function TableDashboardPage() {
         {([
           { id: 'quality', label: 'Quality',       icon: <Shield size={14} /> },
           { id: 'schema',  label: 'Schema',         icon: <Columns size={14} /> },
+          { id: 'rules',   label: 'Rules',           icon: <Database size={14} /> },
           { id: 'lineage', label: 'Lineage',         icon: <GitFork size={14} /> },
           { id: 'drift',   label: 'Schema Drift',   icon: <GitCompare size={14} /> },
           { id: 'trends',  label: 'Profile Trends', icon: <TrendingUp size={14} /> },
@@ -542,199 +537,193 @@ export default function TableDashboardPage() {
         </div>
       )}
 
-      {/* Hero: score ring + KPIs */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-        <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-6 flex items-center gap-6">
-          <div className="relative shrink-0">
-            <ScoreRing score={score} size={120} strokeWidth={10} trackColor={trackColor} />
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className={`text-2xl font-black ${scoreTextColor(score)}`}>{score.toFixed(1)}%</span>
-            </div>
+      {/* KPI Strip — 5 cards */}
+      <div className="grid grid-cols-5 gap-3">
+        {/* Quality Score */}
+        <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-col items-center justify-center gap-1">
+          <div className="flex items-center gap-1">
+            <p className="text-[10px] text-gray-400 uppercase tracking-widest font-medium">Quality Score</p>
+            <MetricInfo metric={METRICS.qualityScore} position="right" />
           </div>
-          <div className="space-y-2 min-w-0">
-            <div>
-              <div className="flex items-center gap-1.5">
-                <p className="text-[11px] text-gray-400 uppercase tracking-widest font-medium">Quality Score</p>
-                <MetricInfo metric={METRICS.qualityScore} position="right" />
-              </div>
-              <p className={`text-xl font-bold mt-0.5 ${scoreTextColor(score)}`}>{scoreLabel(score)}</p>
-            </div>
-            <span className={`inline-block text-xs font-semibold px-2.5 py-1 rounded-full border ${scoreBadgeClass(score)}`}>
-              {score >= 95 ? 'SLA Met' : score >= 80 ? 'Within Threshold' : 'Below SLA'}
-            </span>
-            <div className="pt-1 border-t border-gray-100">
-              <p className="text-[11px] text-gray-400 mb-1">30-day trend</p>
-              <QualityTrendChart data={data.quality_trend || []} height={36} mini />
-            </div>
-          </div>
+          <p className={`text-3xl font-black tabular-nums ${scoreTextColor(score)}`}>{score.toFixed(1)}%</p>
+          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${scoreBadgeClass(score)}`}>{scoreLabel(score)}</span>
         </div>
-
-        <div className="lg:col-span-3 grid grid-cols-2 gap-3">
-          {[
-            { label: 'Total Rules',  value: data.total_rules ?? 0,   icon: Shield,        bg: 'bg-indigo-50', cls: 'text-indigo-600', metricKey: 'activeRules'  },
-            { label: 'Passed',       value: data.passed_rules ?? 0,  icon: CheckCircle,   bg: 'bg-green-50',  cls: 'text-green-600',  metricKey: 'passedToday'  },
-            { label: 'Failed',       value: data.failed_rules ?? 0,  icon: XCircle,       bg: (data.failed_rules ?? 0) > 0 ? 'bg-red-50' : 'bg-gray-50', cls: (data.failed_rules ?? 0) > 0 ? 'text-red-500' : 'text-gray-400', metricKey: 'failedToday' },
-            { label: 'Warnings',     value: data.warning_rules ?? 0, icon: AlertTriangle, bg: (data.warning_rules ?? 0) > 0 ? 'bg-yellow-50' : 'bg-gray-50', cls: (data.warning_rules ?? 0) > 0 ? 'text-yellow-500' : 'text-gray-400', metricKey: undefined },
-          ].map(({ label, value, icon: Icon, bg, cls, metricKey }) => (
-            <div key={label} className="bg-white rounded-xl border border-gray-200 p-4">
-              <div className="flex items-center gap-2 mb-1.5">
-                <div className={`p-1.5 rounded-lg ${bg}`}><Icon size={14} className={cls} /></div>
-                <div className="flex items-center gap-1">
-                  <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">{label}</p>
-                  {metricKey && METRICS[metricKey as keyof typeof METRICS] && (
-                    <MetricInfo metric={METRICS[metricKey as keyof typeof METRICS]} position="top" />
-                  )}
-                </div>
-              </div>
-              <p className="text-3xl font-black text-gray-900 tabular-nums">{value}</p>
-            </div>
-          ))}
+        {/* Total Rules */}
+        <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-col items-center justify-center gap-1">
+          <div className="flex items-center gap-1">
+            <p className="text-[10px] text-gray-400 uppercase tracking-widest font-medium">Total Rules</p>
+            {METRICS.activeRules && <MetricInfo metric={METRICS.activeRules} position="top" />}
+          </div>
+          <p className="text-3xl font-black text-gray-900 tabular-nums">{data.total_rules ?? 0}</p>
+        </div>
+        {/* Passed */}
+        <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-col items-center justify-center gap-1">
+          <div className="flex items-center gap-1">
+            <p className="text-[10px] text-gray-400 uppercase tracking-widest font-medium">Passed</p>
+            {METRICS.passedToday && <MetricInfo metric={METRICS.passedToday} position="top" />}
+          </div>
+          <p className="text-3xl font-black text-green-600 tabular-nums">{data.passed_rules ?? 0}</p>
+        </div>
+        {/* Failed */}
+        <div className={`rounded-xl border p-4 flex flex-col items-center justify-center gap-1 ${(data.failed_rules ?? 0) > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-gray-200'}`}>
+          <div className="flex items-center gap-1">
+            <p className="text-[10px] text-gray-400 uppercase tracking-widest font-medium">Failed</p>
+            {METRICS.failedToday && <MetricInfo metric={METRICS.failedToday} position="top" />}
+          </div>
+          <p className={`text-3xl font-black tabular-nums ${(data.failed_rules ?? 0) > 0 ? 'text-red-500' : 'text-gray-400'}`}>{data.failed_rules ?? 0}</p>
+        </div>
+        {/* Warnings */}
+        <div className={`rounded-xl border p-4 flex flex-col items-center justify-center gap-1 ${(data.warning_rules ?? 0) > 0 ? 'bg-yellow-50 border-yellow-200' : 'bg-white border-gray-200'}`}>
+          <p className="text-[10px] text-gray-400 uppercase tracking-widest font-medium">Warnings</p>
+          <p className={`text-3xl font-black tabular-nums ${(data.warning_rules ?? 0) > 0 ? 'text-yellow-500' : 'text-gray-400'}`}>{data.warning_rules ?? 0}</p>
         </div>
       </div>
 
-      {/* Pass rate */}
+      {/* 30-day Trend */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2"><Activity size={15} className="text-blue-600" /><p className="text-sm font-semibold text-gray-900">Pass Rate</p></div>
-          <span className={`text-sm font-bold ${scoreTextColor(passRate)}`}>{passRate.toFixed(0)}%</span>
-        </div>
-        <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
-          <div className="h-full rounded-full transition-all duration-700" style={{ width: `${passRate}%`, backgroundColor: scoreFill(passRate) }} />
-        </div>
-        <div className="flex justify-between text-[11px] text-gray-400 mt-1.5">
-          <span>{data.passed_rules ?? 0} passed</span><span>{passTotal} total</span><span>{data.failed_rules ?? 0} failed</span>
-        </div>
-      </div>
-
-      {/* Trend */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
         <h3 className="text-sm font-semibold text-gray-900 mb-1">Quality Score Trend</h3>
-        <p className="text-[11px] text-gray-400 mb-4">30-day rolling · green = SLA 95%, amber = warning 80%</p>
-        <QualityTrendChart data={data.quality_trend || []} height={220} area />
+        <p className="text-[11px] text-gray-400 mb-3">30-day rolling · green = SLA 95%, amber = warning 80%</p>
+        <QualityTrendChart data={data.quality_trend || []} height={160} area />
       </div>
 
-      {/* Failed rules with sample records + AI explanation */}
+      {/* Failing Rules — expandable rows */}
       {failedRules.length > 0 && (
         <div className="bg-white rounded-xl border border-red-200 overflow-hidden">
           <div className="px-6 py-4 border-b border-red-100 bg-red-50/30 flex items-center gap-2">
             <XCircle size={15} className="text-red-500" />
             <h3 className="text-sm font-semibold text-gray-900">Failing Rules — {failedRules.length} issue{failedRules.length > 1 ? 's' : ''}</h3>
           </div>
-          <div className="divide-y divide-gray-100">
-            {failedRules.map((rule: any) => {
-              const recentRun = rule.last_run_id
-                ? (data.recent_runs || []).find((r: any) => r.run_id === rule.last_run_id)
-                : (data.recent_runs || []).find((r: any) => r.rule_id === rule.rule_id && r.status !== 'passed')
-              const isExpanded = expandedRun === rule.rule_id
-              return (
-                <div key={rule.rule_id}>
-                  <div
-                    className="px-5 py-4 hover:bg-gray-50 cursor-pointer transition-colors"
-                    onClick={() => setExpandedRun(isExpanded ? null : rule.rule_id)}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Link href={`/rules/${rule.rule_id}`} onClick={e => e.stopPropagation()}
-                            className="text-sm font-semibold text-gray-900 hover:text-blue-600 transition-colors">
-                            {rule.rule_name}
-                          </Link>
-                          <SeverityBadge severity={rule.severity} />
-                        </div>
-                        <p className="text-xs text-gray-500">{rule.rule_type.replace(/_/g, ' ')}</p>
-                      </div>
-                      <div className="flex items-center gap-3 shrink-0">
-                        {rule.quality_score != null && (
-                          <span className={`text-sm font-bold ${scoreTextColor(rule.quality_score)}`}>
-                            {rule.quality_score.toFixed(0)}%
-                          </span>
-                        )}
-                        <StatusBadge status={rule.status} />
-                        {isExpanded ? <ChevronRight size={14} className="text-gray-400 rotate-90" /> : <ChevronRight size={14} className="text-gray-400" />}
-                      </div>
-                    </div>
-                  </div>
-                  {isExpanded && recentRun && (
-                    <div className="px-5 pb-5 bg-gray-50/50 border-t border-gray-100 space-y-4">
-                      {/* Execution stats */}
-                      <div className="grid grid-cols-4 gap-2 pt-3">
-                        {[
-                          { label: 'Last Run',    value: rule.last_run ? relTime(rule.last_run) : '—' },
-                          { label: 'Quality Score', value: rule.quality_score != null ? `${rule.quality_score}%` : '—' },
-                          { label: 'Status',      value: rule.status },
-                          { label: 'Run ID',      value: recentRun.run_id?.slice(0, 8) + '…' },
-                        ].map(({ label, value }) => (
-                          <div key={label} className="bg-white rounded-lg px-3 py-2 border border-gray-100">
-                            <p className="text-[9px] text-gray-400 uppercase tracking-wide">{label}</p>
-                            <p className="text-xs font-semibold text-gray-800 mt-0.5">{value}</p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  {['Rule', 'Severity', 'Score', 'Failed Rows', 'Last Run'].map(h => (
+                    <th key={h} className="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-400 uppercase tracking-widest">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {failedRules.map((rule: any) => {
+                  const recentRun = rule.last_run_id
+                    ? (data.recent_runs || []).find((r: any) => r.run_id === rule.last_run_id)
+                    : (data.recent_runs || []).find((r: any) => r.rule_id === rule.rule_id && r.status !== 'passed')
+                  const isExpanded = expandedRun === rule.rule_id
+                  return (
+                    <>
+                      <tr
+                        key={rule.rule_id}
+                        className="hover:bg-red-50/30 cursor-pointer transition-colors"
+                        onClick={() => setExpandedRun(isExpanded ? null : rule.rule_id)}
+                      >
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            {isExpanded ? <ChevronRight size={13} className="text-gray-400 rotate-90 shrink-0" /> : <ChevronRight size={13} className="text-gray-400 shrink-0" />}
+                            <Link href={`/rules/${rule.rule_id}`} onClick={e => e.stopPropagation()}
+                              className="text-xs font-semibold text-gray-900 hover:text-blue-600 transition-colors">
+                              {rule.rule_name}
+                            </Link>
                           </div>
-                        ))}
-                      </div>
-                      {/* Sample records */}
-                      <div>
-                        <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest mb-1.5">Sample Failed Records</p>
-                        <SampleRecordsPanel runId={recentRun.run_id} ruleId={rule.rule_id} />
-                      </div>
-                      {/* AI explanation */}
-                      <div>
-                        <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest mb-1.5">AI Analysis</p>
-                        <AIExplainPanel runId={recentRun.run_id} ruleId={rule.rule_id} />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
+                        </td>
+                        <td className="px-4 py-3"><SeverityBadge severity={rule.severity} /></td>
+                        <td className="px-4 py-3">
+                          {rule.quality_score != null
+                            ? <span className={`text-xs font-bold ${scoreTextColor(rule.quality_score)}`}>{rule.quality_score.toFixed(0)}%</span>
+                            : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-gray-500">
+                          {recentRun?.failed_row_count != null ? recentRun.failed_row_count.toLocaleString() : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-[11px] text-gray-400">{rule.last_run ? relTime(rule.last_run) : '—'}</td>
+                      </tr>
+                      {isExpanded && recentRun && (
+                        <tr key={`${rule.rule_id}-expanded`}>
+                          <td colSpan={5} className="px-5 pb-5 bg-gray-50/50 border-t border-gray-100">
+                            <div className="space-y-4 pt-3">
+                              {/* Execution stats */}
+                              <div className="grid grid-cols-4 gap-2">
+                                {[
+                                  { label: 'Last Run',      value: rule.last_run ? relTime(rule.last_run) : '—' },
+                                  { label: 'Quality Score', value: rule.quality_score != null ? `${rule.quality_score}%` : '—' },
+                                  { label: 'Status',        value: rule.status },
+                                  { label: 'Run ID',        value: recentRun.run_id?.slice(0, 8) + '…' },
+                                ].map(({ label, value }) => (
+                                  <div key={label} className="bg-white rounded-lg px-3 py-2 border border-gray-100">
+                                    <p className="text-[9px] text-gray-400 uppercase tracking-wide">{label}</p>
+                                    <p className="text-xs font-semibold text-gray-800 mt-0.5">{value}</p>
+                                  </div>
+                                ))}
+                              </div>
+                              {/* Sample records */}
+                              <div>
+                                <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest mb-1.5">Sample Failed Records</p>
+                                <SampleRecordsPanel runId={recentRun.run_id} ruleId={rule.rule_id} />
+                              </div>
+                              {/* AI explanation */}
+                              <div>
+                                <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest mb-1.5">AI Analysis</p>
+                                <AIExplainPanel runId={recentRun.run_id} ruleId={rule.rule_id} />
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
 
-      {/* All rules table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
-          <Database size={15} className="text-gray-500" />
-          <h3 className="text-sm font-semibold text-gray-900">All Rules ({(data.rules || []).length})</h3>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-100">
-              <tr>
-                {['Rule', 'Type', 'Severity', 'Status', 'Score', 'Last Run', ''].map(h => (
-                  <th key={h} className="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-400 uppercase tracking-widest">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {(data.rules || []).map((rule: any) => (
-                <tr key={rule.rule_id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3">
-                    <Link href={`/rules/${rule.rule_id}`} className="text-xs font-semibold text-gray-900 hover:text-blue-600 transition-colors">
-                      {rule.rule_name}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-gray-500">{rule.rule_type.replace(/_/g, ' ')}</td>
-                  <td className="px-4 py-3"><SeverityBadge severity={rule.severity} /></td>
-                  <td className="px-4 py-3"><StatusBadge status={rule.status} /></td>
-                  <td className="px-4 py-3">
-                    {rule.quality_score != null
-                      ? <span className={`text-xs font-bold ${scoreTextColor(rule.quality_score)}`}>{rule.quality_score.toFixed(0)}%</span>
-                      : <span className="text-gray-300">—</span>}
-                  </td>
-                  <td className="px-4 py-3 text-[11px] text-gray-400">{rule.last_run ? relTime(rule.last_run) : '—'}</td>
-                  <td className="px-4 py-3">
-                    <Link href={`/runs?rule_id=${rule.rule_id}`} className="text-xs text-blue-600 hover:underline">History</Link>
-                  </td>
-                </tr>
-              ))}
-              {(data.rules || []).length === 0 && (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-gray-400">No rules configured for this table</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
       </> /* end Quality tab */}
+
+      {/* ── Rules tab ───────────────────────────────────────────── */}
+      {activeTab === 'rules' && (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
+            <Database size={15} className="text-gray-500" />
+            <h3 className="text-sm font-semibold text-gray-900">All Rules ({(data.rules || []).length})</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  {['Rule', 'Type', 'Severity', 'Status', 'Score', 'Last Run', ''].map(h => (
+                    <th key={h} className="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-400 uppercase tracking-widest">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {(data.rules || []).map((rule: any) => (
+                  <tr key={rule.rule_id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3">
+                      <Link href={`/rules/${rule.rule_id}`} className="text-xs font-semibold text-gray-900 hover:text-blue-600 transition-colors">
+                        {rule.rule_name}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-500">{rule.rule_type.replace(/_/g, ' ')}</td>
+                    <td className="px-4 py-3"><SeverityBadge severity={rule.severity} /></td>
+                    <td className="px-4 py-3"><StatusBadge status={rule.status} /></td>
+                    <td className="px-4 py-3">
+                      {rule.quality_score != null
+                        ? <span className={`text-xs font-bold ${scoreTextColor(rule.quality_score)}`}>{rule.quality_score.toFixed(0)}%</span>
+                        : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-[11px] text-gray-400">{rule.last_run ? relTime(rule.last_run) : '—'}</td>
+                    <td className="px-4 py-3">
+                      <Link href={`/runs?rule_id=${rule.rule_id}`} className="text-xs text-blue-600 hover:underline">History</Link>
+                    </td>
+                  </tr>
+                ))}
+                {(data.rules || []).length === 0 && (
+                  <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-gray-400">No rules configured for this table</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* ── Schema tab ──────────────────────────────────────────── */}
       {activeTab === 'schema' && (
