@@ -596,6 +596,73 @@ async def suggest_violation_resolution(
         raise _llm_err(e)
 
 
+@router.post("/assets/{asset_id}/predict-quality")
+@limiter.limit("10/minute")
+async def predict_asset_quality(
+    request: Request,
+    asset_id: str,
+    payload: dict = {},
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Predict whether an asset will fail quality checks in the next 7 days."""
+    try:
+        return await ai_service.predict_asset_quality(
+            asset_id, payload.get("provider"), db
+        )
+    except RuntimeError as e:
+        raise _llm_err(e)
+
+
+@router.get("/assets/at-risk")
+@limiter.limit("5/minute")
+async def at_risk_assets(
+    request: Request,
+    limit: int = 10,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Return assets with highest predicted quality risk from last nightly prediction run."""
+    from sqlalchemy import desc
+    from app.db.models import AnomalyDetection, AnomalyDetector, DataAsset, Domain
+
+    det_res = await db.execute(
+        select(AnomalyDetection, AnomalyDetector, DataAsset, Domain)
+        .join(AnomalyDetector, AnomalyDetection.detector_id == AnomalyDetector.detector_id)
+        .join(DataAsset, AnomalyDetection.asset_id == DataAsset.asset_id)
+        .join(Domain, DataAsset.domain_id == Domain.domain_id)
+        .where(
+            AnomalyDetector.detector_type == "llm_predictor",
+            AnomalyDetection.anomaly_type == "quality_forecast",
+            AnomalyDetection.is_acknowledged == False,
+        )
+        .order_by(desc(AnomalyDetection.detected_at))
+        .limit(limit * 3)
+    )
+    rows = det_res.all()
+
+    seen: set[str] = set()
+    results = []
+    for r in rows:
+        aid = r.AnomalyDetection.asset_id
+        if aid in seen:
+            continue
+        seen.add(aid)
+        results.append({
+            "asset_id": aid,
+            "table": f"{r.DataAsset.sf_schema_name}.{r.DataAsset.sf_table_name}",
+            "domain": r.Domain.domain_name,
+            "risk_level": r.AnomalyDetection.severity,
+            "confidence": r.AnomalyDetection.confidence,
+            "observed": r.AnomalyDetection.observed_value,
+            "detected_at": str(r.AnomalyDetection.detected_at),
+        })
+        if len(results) >= limit:
+            break
+
+    return {"at_risk_assets": results, "count": len(results)}
+
+
 @router.post("/incidents/{incident_id}/generate-postmortem")
 async def generate_postmortem(
     incident_id: str,
