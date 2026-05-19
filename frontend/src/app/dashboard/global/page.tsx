@@ -308,7 +308,7 @@ export default function GlobalDashboardPage() {
                 <div key={key}
                   title={`${label}: ${val !== null ? `${val.toFixed(1)}%` : 'No data'} — based on today's rule executions`}
                   className={`${cssClass} rounded-lg flex flex-col items-center justify-between p-2 cursor-help`}
-                  style={{ border: '1px solid', minHeight: 0 }}>
+                  style={{ borderWidth: '1px', borderStyle: 'solid', minHeight: 0 }}>
                   <span className="text-base leading-none">{icon}</span>
                   <span className="text-[9px] uppercase tracking-wide text-center font-medium whitespace-nowrap overflow-hidden text-ellipsis w-full" style={{ color: 'var(--text-3)' }}>
                     {label}
