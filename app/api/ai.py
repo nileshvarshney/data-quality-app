@@ -577,6 +577,25 @@ async def steward_review_queue(
         raise _llm_err(e)
 
 
+@router.post("/governance/violations/{violation_id}/suggest-resolution")
+@limiter.limit("20/minute")
+async def suggest_violation_resolution(
+    request: Request,
+    violation_id: str,
+    payload: dict = {},
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Draft a professional resolution note for a governance policy violation."""
+    try:
+        resolution = await ai_service.suggest_violation_resolution(
+            violation_id, payload.get("provider"), db
+        )
+        return {"violation_id": violation_id, "suggested_resolution": resolution}
+    except RuntimeError as e:
+        raise _llm_err(e)
+
+
 @router.post("/incidents/{incident_id}/generate-postmortem")
 async def generate_postmortem(
     incident_id: str,

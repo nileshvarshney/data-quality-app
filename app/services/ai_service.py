@@ -825,3 +825,53 @@ async def get_steward_review_queue(
         "ai_actions": ai_actions,
         "summary": ai_actions.get("priority_summary", ""),
     }
+
+
+async def suggest_violation_resolution(
+    violation_id: str,
+    provider_name: str | None,
+    db: AsyncSession,
+) -> str:
+    """Draft a professional resolution note for a governance policy violation."""
+
+    viol_res = await db.execute(
+        select(PolicyViolation, GovernancePolicy)
+        .join(GovernancePolicy, PolicyViolation.policy_id == GovernancePolicy.policy_id)
+        .where(PolicyViolation.violation_id == violation_id)
+    )
+    row = viol_res.one_or_none()
+    if not row:
+        return "Violation not found."
+    violation, policy = row.PolicyViolation, row.GovernancePolicy
+
+    entity_context = ""
+    if violation.entity_type == "asset" and violation.entity_id:
+        asset_res = await db.execute(
+            select(DataAsset, Domain)
+            .join(Domain, DataAsset.domain_id == Domain.domain_id)
+            .where(DataAsset.asset_id == violation.entity_id)
+        )
+        asset_row = asset_res.one_or_none()
+        if asset_row:
+            entity_context = (
+                f"Asset: {asset_row.DataAsset.sf_table_name} "
+                f"(Domain: {asset_row.Domain.domain_name}, "
+                f"Owner: {asset_row.DataAsset.owner_email or 'unknown'})"
+            )
+
+    sys_res = (
+        "You are a data governance steward. Draft a concise, professional resolution note "
+        "for a governance policy violation. The note should: (1) acknowledge the violation, "
+        "(2) state the corrective action taken or to be taken, "
+        "(3) indicate timeline for resolution. "
+        "Write in first-person active voice. 2-4 sentences maximum."
+    )
+    prompt = (
+        f"Policy: {policy.policy_name} (type: {policy.policy_type}, severity: {policy.severity})\n"
+        f"Violation detail: {violation.violation_detail or 'Not specified'}\n"
+        f"Entity: {entity_context or violation.entity_id}\n"
+        f"Detected: {violation.detected_at}\n\n"
+        f"Draft a resolution note for this violation."
+    )
+    provider = await get_provider_from_db(provider_name, db)
+    return await provider.complete(prompt, sys_res, max_tokens=300)
