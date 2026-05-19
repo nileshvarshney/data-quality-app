@@ -646,3 +646,60 @@ async def generate_asset_description(
     asset.table_description = description
     await db.commit()
     return description
+
+
+async def generate_column_docs(
+    asset_id: str,
+    provider_name: str | None,
+    db: AsyncSession,
+) -> dict:
+    """Generate and save column descriptions for all columns on an asset."""
+    from app.db.models import ColumnMetadata
+    import json as _j
+
+    asset_res = await db.execute(select(DataAsset).where(DataAsset.asset_id == asset_id))
+    asset = asset_res.scalar_one_or_none()
+    if not asset:
+        return {"error": "Asset not found"}
+
+    cols_res = await db.execute(
+        select(ColumnMetadata).where(ColumnMetadata.asset_id == asset_id)
+    )
+    cols = cols_res.scalars().all()
+    if not cols:
+        return {"documented": 0, "skipped": 0, "message": "No column metadata — run profiling first"}
+
+    col_lines = "\n".join(
+        f"{c.column_name} ({c.data_type or '?'})"
+        + (f" — samples: {c.sample_values[:60]}" if c.sample_values else "")
+        + (f", {c.cardinality_pct:.0f}% unique" if c.cardinality_pct is not None else "")
+        for c in cols
+    )
+    sys_col = (
+        "You are a data governance expert. Write a concise 1-sentence business description "
+        "for each column in the list. Return ONLY a JSON object mapping column_name → description string."
+    )
+    prompt = (
+        f"Table: {asset.sf_schema_name}.{asset.sf_table_name}\n"
+        f"Columns:\n{col_lines}"
+    )
+
+    provider = await get_provider_from_db(provider_name, db)
+    raw = await provider.complete(prompt, sys_col, max_tokens=1200)
+    try:
+        start = raw.find("{"); end = raw.rfind("}") + 1
+        col_map: dict[str, str] = _j.loads(raw[start:end]) if start >= 0 else {}
+    except Exception:
+        col_map = {}
+
+    documented = 0
+    skipped = 0
+    col_by_name = {c.column_name: c for c in cols}
+    for col_name, desc in col_map.items():
+        if col_name in col_by_name and desc:
+            col_by_name[col_name].description = str(desc).strip()
+            documented += 1
+        else:
+            skipped += 1
+    await db.commit()
+    return {"asset_id": asset_id, "documented": documented, "skipped": skipped}

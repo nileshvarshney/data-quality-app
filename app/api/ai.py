@@ -525,6 +525,25 @@ async def generate_asset_description(
         raise _llm_err(e)
 
 
+@router.post("/assets/{asset_id}/generate-column-docs")
+@limiter.limit("10/minute")
+async def generate_column_docs(
+    request: Request,
+    asset_id: str,
+    payload: dict = {},
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Generate and save column descriptions for all columns on a data asset."""
+    try:
+        result = await ai_service.generate_column_docs(
+            asset_id, payload.get("provider"), db
+        )
+        return result
+    except RuntimeError as e:
+        raise _llm_err(e)
+
+
 @router.post("/incidents/{incident_id}/generate-postmortem")
 async def generate_postmortem(
     incident_id: str,
