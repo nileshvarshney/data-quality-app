@@ -319,6 +319,44 @@ export default function DomainDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* ── ROW 3: Subdomain Health ────────────────────────────────────── */}
+      <div className="mx-3 mb-1.5 rounded-lg p-3 shrink-0" style={card}>
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Subdomain Health</span>
+          <Link href={`/dashboard/domains/${domainId}`} className="text-[10px] font-medium" style={{ color: '#6366f1' }}>
+            → All subdomains
+          </Link>
+        </div>
+        <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
+          {subdomains.map(sub => {
+            const ss = sub.quality_score ?? 0
+            const isRisk = ss < 80
+            return (
+              <Link key={sub.subdomain_id} href={`/dashboard/subdomains/${sub.subdomain_id}`}
+                title={`${sub.subdomain_name}: ${ss.toFixed(0)}% quality · ${sub.total_rules} rules — click to navigate`}
+                className="flex items-center justify-between rounded px-2 py-1.5 relative transition-opacity hover:opacity-80"
+                style={{
+                  border: `1px solid ${isRisk ? 'rgba(239,68,68,0.3)' : 'var(--border)'}`,
+                  borderLeftColor: scoreBorderColor(ss),
+                  borderLeftWidth: '3px',
+                  background: isRisk ? 'rgba(239,68,68,0.04)' : 'var(--surface-sub)',
+                }}>
+                <span className="absolute top-1 right-2 text-[8px]" style={{ color: '#6366f1' }}>↗</span>
+                <div className="min-w-0">
+                  <div className="text-[11px] font-semibold truncate" style={{ color: isRisk ? '#dc2626' : 'var(--text)' }}>
+                    {sub.subdomain_name}{isRisk ? ' ⚠' : ''}
+                  </div>
+                  <div className="text-[9px]" style={{ color: 'var(--text-4)' }}>{sub.total_rules}r</div>
+                </div>
+                <span className="text-sm font-black tabular-nums shrink-0" style={{ color: scoreColor(ss) }}>
+                  {ss.toFixed(0)}%
+                </span>
+              </Link>
+            )
+          })}
+        </div>
+      </div>
     </div>
   )
 }
