@@ -10,7 +10,6 @@ import {
 import { dashboardApi, executionsApi } from '@/services/apiClient'
 import { GlobalDashboard, DomainSummary, DimensionScores } from '@/types'
 import QualityTrendChart from '@/components/charts/QualityTrendChart'
-import SeverityBadge from '@/components/common/SeverityBadge'
 import { useTimezone } from '@/contexts/TimezoneContext'
 
 // ── Score colour helpers ───────────────────────────────────────────────────
@@ -20,12 +19,6 @@ function scoreColor(s: number) {
   if (s >= 80) return '#f59e0b'
   if (s >= 60) return '#f97316'
   return '#ef4444'
-}
-function scoreTextClass(s: number) {
-  if (s >= 95) return 'text-green-500'
-  if (s >= 80) return 'text-yellow-500'
-  if (s >= 60) return 'text-orange-500'
-  return 'text-red-500'
 }
 function scoreBorderColor(s: number) {
   if (s >= 95) return '#22c55e'
