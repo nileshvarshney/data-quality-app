@@ -1,6 +1,239 @@
+# Domain Page Redesign Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Redesign `/dashboard/domains/[domainId]/PageClient.tsx` to match the global dashboard's compact no-scroll layout with full dark/light theme support.
+
+**Architecture:** Full rewrite of the domain `PageClient.tsx` using the same 5-row `h-screen flex flex-col overflow-hidden` structure as the global dashboard. Two additive backend changes expose domain-scoped dimensions and at-risk tables. All colours use CSS variables so dark/light themes work automatically.
+
+**Tech Stack:** Next.js 15, TypeScript, Tailwind (CSS variables), FastAPI, SQLAlchemy, Recharts
+
+**Spec:** `docs/superpowers/specs/2026-05-19-domain-page-redesign.md`
+
+---
+
+## File Map
+
+| File | Action | What changes |
+|---|---|---|
+| `app/api/dashboard.py` | Modify | Add `domain_id` param to `/dimensions`; add `at_risk_tables` + `sla_breaches` to domain endpoint |
+| `frontend/src/services/apiClient.ts` | Modify | `dimensions()` accepts optional `{ domain_id?: string }` |
+| `frontend/src/types/index.ts` | Modify | Add `DomainDashboard` interface |
+| `frontend/src/app/dashboard/domains/[domainId]/PageClient.tsx` | Rewrite | Full layout rewrite |
+
+---
+
+## Task 1: Backend — add `domain_id` filter to `/dashboard/dimensions`
+
+**Files:**
+- Modify: `app/api/dashboard.py:716-751`
+
+- [ ] **Step 1: Open `app/api/dashboard.py` and locate the `quality_dimensions` function at line 716**
+
+- [ ] **Step 2: Add the `domain_id` query parameter**
+
+Replace the current function signature and first line:
+
+```python
+# BEFORE (line 717-722)
+async def quality_dimensions(
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    """Return quality scores grouped by data quality dimension for today's runs."""
+    domain_scope = get_domain_filter(user)
+
+# AFTER
+async def quality_dimensions(
+    domain_id: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    """Return quality scores grouped by data quality dimension for today's runs."""
+    domain_scope = domain_id or get_domain_filter(user)
+```
+
+The rest of the function is unchanged. `Query` is already imported at the top of the file.
+
+- [ ] **Step 3: Verify the change manually**
+
+```bash
+cd /path/to/repo && grep -n "domain_id\|domain_scope" app/api/dashboard.py | grep -A2 -B2 "quality_dimensions"
+```
+
+Expected: lines 716-725 show `domain_id: str | None = Query(None)` and `domain_scope = domain_id or get_domain_filter(user)`.
+
+- [ ] **Step 4: Run existing tests to confirm nothing broke**
+
+```bash
+pytest tests/ -x -q 2>&1 | tail -10
+```
+
+Expected: all tests pass (or same failures as before this change).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add app/api/dashboard.py
+git commit -m "feat(api): add optional domain_id filter to /dashboard/dimensions"
+```
+
+---
+
+## Task 2: Backend — add `at_risk_tables` and `sla_breaches` to domain endpoint
+
+**Files:**
+- Modify: `app/api/dashboard.py:517-528`
+
+- [ ] **Step 1: Locate the `domain_dashboard` function return statement (around line 517)**
+
+The current return dict ends at line 528. Add two calls before it.
+
+- [ ] **Step 2: Add the helper calls and fields to the return dict**
+
+```python
+# BEFORE (lines ~499-528)
+    trend = await _build_trend(db, days=14, domain_id=domain_id)
+
+    failed_runs = sorted(...)
+    top_failing = [...]
+
+    subdomain_data = []
+    for sub in subs:
+        ...
+
+    return {
+        "domain_id": domain.domain_id,
+        "domain_name": domain.domain_name,
+        "quality_score": score,
+        "total_rules": len(all_rules),
+        "passed_rules": sum(1 for r in today_runs if r.status == "passed"),
+        "failed_rules": sum(1 for r in today_runs if r.status in ("failed", "error")),
+        "critical_failures": sum(1 for r in today_runs if r.status == "failed"),
+        "subdomains": subdomain_data,
+        "quality_trend": trend,
+        "top_failing_rules": top_failing,
+    }
+
+# AFTER — insert two lines before return, and add two keys
+    trend = await _build_trend(db, days=14, domain_id=domain_id)
+    at_risk_tables = await _get_at_risk_tables(db, domain_scope=domain_id)
+    sla_breaches   = await _get_sla_breaches(db, domain_scope=domain_id)
+
+    failed_runs = sorted(...)
+    top_failing = [...]
+
+    subdomain_data = []
+    for sub in subs:
+        ...
+
+    return {
+        "domain_id": domain.domain_id,
+        "domain_name": domain.domain_name,
+        "quality_score": score,
+        "total_rules": len(all_rules),
+        "passed_rules": sum(1 for r in today_runs if r.status == "passed"),
+        "failed_rules": sum(1 for r in today_runs if r.status in ("failed", "error")),
+        "critical_failures": sum(1 for r in today_runs if r.status == "failed"),
+        "subdomains": subdomain_data,
+        "quality_trend": trend,
+        "top_failing_rules": top_failing,
+        "at_risk_tables": at_risk_tables,
+        "sla_breaches": sla_breaches,
+    }
+```
+
+- [ ] **Step 3: Run existing tests**
+
+```bash
+pytest tests/ -x -q 2>&1 | tail -10
+```
+
+Expected: all pass.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add app/api/dashboard.py
+git commit -m "feat(api): add at_risk_tables and sla_breaches to domain endpoint"
+```
+
+---
+
+## Task 3: Frontend — update `apiClient.ts` and TypeScript types
+
+**Files:**
+- Modify: `frontend/src/services/apiClient.ts`
+- Modify: `frontend/src/types/index.ts`
+
+- [ ] **Step 1: Update `dimensions` in `apiClient.ts`**
+
+Find the current line (~line 200):
+```ts
+dimensions:       () => api.get('/dashboard/dimensions'),
+```
+
+Replace with:
+```ts
+dimensions:       (params?: { domain_id?: string }) => api.get('/dashboard/dimensions', { params }),
+```
+
+- [ ] **Step 2: Add `DomainDashboard` interface to `frontend/src/types/index.ts`**
+
+Add after the existing `DomainSummary` interface (around line 116):
+
+```ts
+export interface DomainDashboard {
+  domain_id:         string
+  domain_name:       string
+  quality_score:     number
+  total_rules:       number
+  passed_rules:      number
+  failed_rules:      number
+  critical_failures: number
+  subdomains: {
+    subdomain_id:   string
+    subdomain_name: string
+    quality_score:  number
+    total_rules:    number
+  }[]
+  quality_trend: Array<{ date: string; score: number | null; total: number; passed: number }>
+  top_failing_rules: { run_id: string; rule_id: string; status: string; failed_rows: number }[]
+  at_risk_tables: { table_name: string; schema_name: string; domain_name: string; score: number; score_delta: number }[]
+  sla_breaches: { table_name: string; schema_name: string; domain_name: string; score: number; days_below_sla: number }[]
+}
+```
+
+- [ ] **Step 3: Run type-check**
+
+```bash
+cd frontend && npm run type-check 2>&1 | tail -20
+```
+
+Expected: no new errors.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add frontend/src/services/apiClient.ts frontend/src/types/index.ts
+git commit -m "feat(types): add DomainDashboard type and domain_id param to dimensions call"
+```
+
+---
+
+## Task 4: Rewrite `PageClient.tsx` — scaffolding, state, and data loading
+
+**Files:**
+- Rewrite: `frontend/src/app/dashboard/domains/[domainId]/PageClient.tsx`
+
+This task replaces the entire file. Later tasks fill in the render rows.
+
+- [ ] **Step 1: Replace the file with the new scaffold**
+
+```tsx
 'use client'
 import { useEffect, useState, useCallback } from 'react'
-import { useParams, usePathname, useRouter } from 'next/navigation'
+import { useParams, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import {
   Globe, Shield, CheckCircle, XCircle, AlertTriangle,
@@ -15,6 +248,13 @@ import { useTimezone } from '@/contexts/TimezoneContext'
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function scoreColor(s: number): string {
+  if (s >= 95) return '#22c55e'
+  if (s >= 80) return '#f59e0b'
+  if (s >= 60) return '#f97316'
+  return '#ef4444'
+}
+
+function scoreBorderColor(s: number): string {
   if (s >= 95) return '#22c55e'
   if (s >= 80) return '#f59e0b'
   if (s >= 60) return '#f97316'
@@ -59,7 +299,6 @@ export default function DomainDetailPage() {
     ? _domainId
     : pathname.split('/').filter(Boolean).pop() ?? ''
 
-  const router = useRouter()
   const { formatTime } = useTimezone()
 
   const [data,           setData]           = useState<DomainDashboard | null>(null)
@@ -80,15 +319,12 @@ export default function DomainDetailPage() {
         executionsApi.listRunsEnriched({ domain_id: domainId, status: 'failed', limit: 8 }),
         dashboardApi.dimensions({ domain_id: domainId }),
       ])
-      if (dRes.status   === 'fulfilled') {
-        setData(dRes.value.data)
-        setError('')
-      } else {
-        setError('Failed to load domain data')
-      }
+      if (dRes.status   === 'fulfilled') setData(dRes.value.data)
+      else setError('Failed to load domain data')
       if (rRes.status   === 'fulfilled') setRecentFailures(Array.isArray(rRes.value.data) ? rRes.value.data : [])
       if (dimRes.status === 'fulfilled') setDimensions(dimRes.value.data)
       setLastRefreshed(new Date())
+      setError('')
     } catch {
       setError('Failed to load domain data.')
     } finally {
@@ -141,6 +377,7 @@ export default function DomainDetailPage() {
   const atRiskSubs      = subdomains.filter(s => s.quality_score < 80).length
   const atRiskTables    = data.at_risk_tables ?? []
   const slaBreaches     = data.sla_breaches ?? []
+  const passTotal       = (data.passed_rules ?? 0) + (data.failed_rules ?? 0)
   const scoreDelta = (() => {
     if (!trendData || trendData.length < 2) return 0
     return (trendData[trendData.length - 1]?.score ?? 0) - (trendData[trendData.length - 2]?.score ?? 0)
@@ -169,6 +406,39 @@ export default function DomainDetailPage() {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden" style={{ background: 'var(--bg)', color: 'var(--text)' }}>
+      {/* Rows rendered in Tasks 5–8 */}
+    </div>
+  )
+}
+```
+
+- [ ] **Step 2: Run type-check**
+
+```bash
+cd frontend && npm run type-check 2>&1 | tail -20
+```
+
+Expected: no errors (the render returns an empty div for now).
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add frontend/src/app/dashboard/domains/\[domainId\]/PageClient.tsx
+git commit -m "feat(domain): scaffold new PageClient with state, helpers, and data loading"
+```
+
+---
+
+## Task 5: Row 0 (status bar) + Row 1 (hero score + KPI chips)
+
+**Files:**
+- Modify: `frontend/src/app/dashboard/domains/[domainId]/PageClient.tsx`
+
+- [ ] **Step 1: Replace the empty `return` body with Row 0 and Row 1**
+
+Replace the `return (` block's inner `<div>` content (the `{/* Rows rendered... */}` comment) with:
+
+```tsx
       {/* ── ROW 0: Status bar ─────────────────────────────────────────── */}
       <div className="flex items-center justify-between py-1.5 px-4 shrink-0"
         style={{ ...card, borderRadius: 0, borderLeft: 'none', borderRight: 'none', borderTop: 'none' }}>
@@ -211,10 +481,7 @@ export default function DomainDetailPage() {
       {/* ── ROW 1: Hero score (1/3) + 6 KPI chips (2/3) ──────────────── */}
       <div className="grid px-3 pt-3 pb-1.5 gap-3 shrink-0" style={{ gridTemplateColumns: '1fr 2fr' }}>
 
-        <button
-          title="Click to view detailed quality scorecard"
-          onClick={() => router.push('/dashboard/quality-score')}
-          className="rounded-xl p-4 flex flex-col items-center justify-center gap-2 relative cursor-pointer"
+        <div className="rounded-xl p-4 flex flex-col items-center justify-center gap-2 relative"
           style={{ background: 'linear-gradient(145deg,#f0fdf4,#dcfce7,#bbf7d0)', border: '2px solid #86efac', boxShadow: '0 6px 20px rgba(34,197,94,0.18)' }}>
           <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: '#15803d' }}>Domain Quality Score</span>
           <span className="font-black leading-none tabular-nums" style={{ fontSize: '3rem', color: '#15803d', letterSpacing: '-2px' }}>
@@ -227,7 +494,7 @@ export default function DomainDetailPage() {
               {scoreDelta > 0 ? '+' : ''}{scoreDelta.toFixed(1)}% vs yesterday
             </span>
           )}
-        </button>
+        </div>
 
         <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(3,1fr)', gridTemplateRows: '1fr 1fr' }}>
           <div className="rounded-lg flex flex-col items-center justify-center gap-1 py-2" style={card}>
@@ -272,7 +539,33 @@ export default function DomainDetailPage() {
           </div>
         </div>
       </div>
+```
 
+- [ ] **Step 2: Type-check**
+
+```bash
+cd frontend && npm run type-check 2>&1 | tail -20
+```
+
+Expected: no errors.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add frontend/src/app/dashboard/domains/\[domainId\]/PageClient.tsx
+git commit -m "feat(domain): add status bar and hero score + KPI chips (rows 0–1)"
+```
+
+---
+
+## Task 6: Row 2 — Quality Trend + Quality Dimensions
+
+**Files:**
+- Modify: `frontend/src/app/dashboard/domains/[domainId]/PageClient.tsx`
+
+- [ ] **Step 1: Add Row 2 after the Row 1 closing `</div>`**
+
+```tsx
       {/* ── ROW 2: Quality Trend + Quality Dimensions ──────────────────── */}
       <div className="grid px-3 pb-1.5 gap-3 shrink-0" style={{ gridTemplateColumns: '1fr 1.2fr', minHeight: '160px' }}>
 
@@ -319,11 +612,40 @@ export default function DomainDetailPage() {
           </div>
         </div>
       </div>
+```
 
+- [ ] **Step 2: Type-check**
+
+```bash
+cd frontend && npm run type-check 2>&1 | tail -20
+```
+
+Expected: no errors.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add frontend/src/app/dashboard/domains/\[domainId\]/PageClient.tsx
+git commit -m "feat(domain): add quality trend and dimensions section (row 2)"
+```
+
+---
+
+## Task 7: Row 3 — Subdomain Health tiles
+
+**Files:**
+- Modify: `frontend/src/app/dashboard/domains/[domainId]/PageClient.tsx`
+
+- [ ] **Step 1: Add Row 3 after the Row 2 closing `</div>`**
+
+```tsx
       {/* ── ROW 3: Subdomain Health ────────────────────────────────────── */}
       <div className="mx-3 mb-1.5 rounded-lg p-3 shrink-0" style={card}>
-        <div className="mb-2">
+        <div className="flex items-center justify-between mb-2">
           <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Subdomain Health</span>
+          <Link href={`/dashboard/domains/${domainId}`} className="text-[10px] font-medium" style={{ color: '#6366f1' }}>
+            → All subdomains
+          </Link>
         </div>
         <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
           {subdomains.map(sub => {
@@ -335,7 +657,7 @@ export default function DomainDetailPage() {
                 className="flex items-center justify-between rounded px-2 py-1.5 relative transition-opacity hover:opacity-80"
                 style={{
                   border: `1px solid ${isRisk ? 'rgba(239,68,68,0.3)' : 'var(--border)'}`,
-                  borderLeftColor: scoreColor(ss),
+                  borderLeftColor: scoreBorderColor(ss),
                   borderLeftWidth: '3px',
                   background: isRisk ? 'rgba(239,68,68,0.04)' : 'var(--surface-sub)',
                 }}>
@@ -354,7 +676,33 @@ export default function DomainDetailPage() {
           })}
         </div>
       </div>
+```
 
+- [ ] **Step 2: Type-check**
+
+```bash
+cd frontend && npm run type-check 2>&1 | tail -20
+```
+
+Expected: no errors.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add frontend/src/app/dashboard/domains/\[domainId\]/PageClient.tsx
+git commit -m "feat(domain): add subdomain health tiles (row 3)"
+```
+
+---
+
+## Task 8: Row 4 — Bottom tray (Recent Failures / At-Risk Tables / Top Issues)
+
+**Files:**
+- Modify: `frontend/src/app/dashboard/domains/[domainId]/PageClient.tsx`
+
+- [ ] **Step 1: Add Row 4 after the Row 3 closing `</div>`**
+
+```tsx
       {/* ── ROW 4: Bottom tray ────────────────────────────────────────── */}
       <div className="grid px-3 pb-3 gap-3 flex-1 min-h-0" style={{ gridTemplateColumns: '1.6fr 1fr 1.2fr' }}>
 
@@ -441,6 +789,100 @@ export default function DomainDetailPage() {
         </div>
 
       </div>
-    </div>
-  )
-}
+```
+
+- [ ] **Step 2: Type-check**
+
+```bash
+cd frontend && npm run type-check 2>&1 | tail -20
+```
+
+Expected: no errors.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add frontend/src/app/dashboard/domains/\[domainId\]/PageClient.tsx
+git commit -m "feat(domain): add bottom tray — failures, at-risk tables, top issues (row 4)"
+```
+
+---
+
+## Task 9: Verify in browser (both themes)
+
+**Files:** None — verification only
+
+- [ ] **Step 1: Start the dev server if not already running**
+
+```bash
+cd frontend && npm run dev
+```
+
+- [ ] **Step 2: Open the domain page in the browser**
+
+Navigate to: `http://localhost:3000/dashboard/domains/<any-domain-id>`
+
+Check:
+- Layout fills the viewport with no vertical scroll
+- Status bar shows health pill + breadcrumb + timestamp
+- Hero score card renders green gradient
+- 6 KPI chips visible in 3×2 grid
+- Quality Trend chart shows with period buttons (7d/14d/30d/90d)
+- Quality Dimensions shows 5 dimension cards
+- Subdomain Health tiles render with colour-coded left borders
+- Bottom tray: 3 columns fill remaining height
+
+- [ ] **Step 3: Switch to light theme**
+
+Use the theme toggle (⚙ settings in the nav). Confirm:
+- All backgrounds switch to light surface colours (`#f0f4f8`, `#ffffff`)
+- Text colours are readable (dark on light)
+- Hero card stays green gradient (hardcoded — correct)
+- Dimension cards use their CSS-variable-based `dim-*` classes (defined in `globals.css` for both themes)
+
+- [ ] **Step 4: Switch to dark theme**
+
+Confirm:
+- All backgrounds use dark CSS variables
+- No hardcoded `bg-white` or `text-gray-*` classes visible
+
+- [ ] **Step 5: Run type-check and lint**
+
+```bash
+cd frontend && npm run type-check && npm run lint 2>&1 | tail -20
+```
+
+Expected: no errors.
+
+- [ ] **Step 6: Final commit**
+
+```bash
+git add -A
+git commit -m "feat(domain): redesign domain detail page — global dashboard style with dark/light theme"
+```
+
+---
+
+## Self-Review
+
+**Spec coverage check:**
+
+| Spec requirement | Task |
+|---|---|
+| `h-screen flex flex-col overflow-hidden` root | Task 4 |
+| All CSS variables (`var(--bg)`, `var(--surface)`, etc.) | Tasks 4–8 |
+| Row 0: status bar with health pill + breadcrumb + buttons | Task 5 |
+| Row 1: hero score card (gradient green) + 6 KPI chips | Task 5 |
+| Row 2: trend chart with period picker (domainHistory) | Task 6 |
+| Row 2: quality dimensions (5 `dim-*` cards, domain-filtered) | Task 6 |
+| Row 3: subdomain health horizontal tiles | Task 7 |
+| Row 4: recent failures column | Task 8 |
+| Row 4: at-risk tables column | Task 8 |
+| Row 4: top issues column | Task 8 |
+| Backend: `domain_id` param on `/dimensions` | Task 1 |
+| Backend: `at_risk_tables` + `sla_breaches` on domain endpoint | Task 2 |
+| `apiClient.ts` dimensions signature update | Task 3 |
+| `DomainDashboard` TypeScript type | Task 3 |
+| Dark/light theme verification | Task 9 |
+
+All requirements covered. No gaps found.

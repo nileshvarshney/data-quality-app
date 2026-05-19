@@ -495,8 +495,11 @@ async def domain_dashboard(
 
     rules_result = await db.execute(select(DQRule).where(DQRule.domain_id == domain_id, DQRule.is_active == True))
     all_rules = rules_result.scalars().all()
+    rule_severity = {r.rule_id: r.severity for r in all_rules}
 
     trend = await _build_trend(db, days=14, domain_id=domain_id)
+    at_risk_tables = await _get_at_risk_tables(db, domain_scope=domain_id)
+    sla_breaches   = await _get_sla_breaches(db, domain_scope=domain_id)
 
     failed_runs = sorted([r for r in today_runs if r.status in ("failed", "error")],
                          key=lambda r: r.created_at, reverse=True)[:5]
@@ -521,10 +524,12 @@ async def domain_dashboard(
         "total_rules": len(all_rules),
         "passed_rules": sum(1 for r in today_runs if r.status == "passed"),
         "failed_rules": sum(1 for r in today_runs if r.status in ("failed", "error")),
-        "critical_failures": sum(1 for r in today_runs if r.status == "failed"),
+        "critical_failures": sum(1 for r in today_runs if r.status in ("failed", "error") and rule_severity.get(r.rule_id) == "critical"),
         "subdomains": subdomain_data,
         "quality_trend": trend,
         "top_failing_rules": top_failing,
+        "at_risk_tables": at_risk_tables,
+        "sla_breaches": sla_breaches,
     }
 
 
@@ -715,11 +720,14 @@ async def global_trend(
 
 @router.get("/dimensions")
 async def quality_dimensions(
+    domain_id: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
     """Return quality scores grouped by data quality dimension for today's runs."""
-    domain_scope = get_domain_filter(user)
+    if domain_id:
+        check_domain_access(user, domain_id)
+    domain_scope = domain_id or get_domain_filter(user)
     today = datetime.now(timezone.utc).replace(tzinfo=None).date()
 
     q = (

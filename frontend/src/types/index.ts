@@ -115,6 +115,26 @@ export interface DomainSummary {
   total_assets: number
 }
 
+export interface DomainDashboard {
+  domain_id:         string
+  domain_name:       string
+  quality_score:     number
+  total_rules:       number
+  passed_rules:      number
+  failed_rules:      number
+  critical_failures: number
+  subdomains: {
+    subdomain_id:   string
+    subdomain_name: string
+    quality_score:  number
+    total_rules:    number
+  }[]
+  quality_trend: Array<{ date: string; score: number | null; total: number; passed: number }>
+  top_failing_rules: { run_id: string; rule_id: string; status: string; failed_rows: number }[]
+  at_risk_tables: { table_name: string; schema_name: string; domain_name: string; score: number; score_delta: number }[]
+  sla_breaches: { table_name: string; schema_name: string; domain_name: string; score: number; days_below_sla: number }[]
+}
+
 export interface Alert {
   alert_id: string
   rule_id: string

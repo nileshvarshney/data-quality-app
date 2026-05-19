@@ -197,7 +197,7 @@ export const dashboardApi = {
   domainHistory:    (id: string, days?: number) => api.get(`/dashboard/history/domain/${id}`, { params: { days } }),
   slaBreaches:      () => api.get('/dashboard/sla-breaches'),
   trend:            (days: number) => api.get('/dashboard/trend', { params: { days } }),
-  dimensions:       () => api.get('/dashboard/dimensions'),
+  dimensions:       (params?: { domain_id?: string }) => api.get('/dashboard/dimensions', { params }),
 }
 
 // AI
