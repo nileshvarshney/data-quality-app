@@ -663,6 +663,24 @@ async def at_risk_assets(
     return {"at_risk_assets": results, "count": len(results)}
 
 
+@router.post("/assets/{asset_id}/remediation-plan")
+@limiter.limit("10/minute")
+async def asset_remediation_plan(
+    request: Request,
+    asset_id: str,
+    payload: dict = {},
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Generate structured remediation plan for an asset's recent quality failures."""
+    try:
+        return await ai_service.generate_remediation_plan(
+            asset_id, payload.get("provider"), db
+        )
+    except RuntimeError as e:
+        raise _llm_err(e)
+
+
 @router.post("/incidents/{incident_id}/generate-postmortem")
 async def generate_postmortem(
     incident_id: str,

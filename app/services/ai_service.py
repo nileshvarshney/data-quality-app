@@ -1012,3 +1012,107 @@ async def predict_asset_quality(
         "runs_analysed": len(runs),
         "prediction": prediction,
     }
+
+
+_REMEDIATION_HINTS: dict[str, str] = {
+    "null_check": "Check upstream ETL for missing field mappings. Verify NOT NULL constraints in source system.",
+    "uniqueness_check": "Identify duplicate ingestion pipelines. Check deduplication logic in ETL.",
+    "freshness_check": "Verify upstream ETL job completion. Check scheduler logs. Confirm data pipeline SLA.",
+    "volume_check": "Compare row counts to yesterday. Check for upstream truncation or filter changes.",
+    "regex_check": "Audit source system for format changes. Add input validation at ingestion.",
+    "range_check": "Check for unit changes. Look for outliers or data entry errors in source.",
+    "accepted_values_check": "Update accepted values list if business expanded. Check source enum changes.",
+    "referential_integrity_check": "Investigate orphaned records. Check if parent records were deleted.",
+    "business_rule_check": "Review business rule definition. Check if business process changed.",
+    "schema_drift_check": "Compare current schema to baseline. Identify who altered the table.",
+    "distribution_consistency_check": "Check for seasonality. Compare to same period last year.",
+    "semantic_consistency_check": "Audit cross-column business logic. Check for field reuse or misalignment.",
+    "custom_sql_check": "Review custom SQL logic against current data model.",
+    "llm_semantic_check": "Review the LLM validation prompt. Sample failing rows to understand pattern.",
+    "referential_sanity_check": "Check condition logic against current data. Review business rule accuracy.",
+    "business_metric_check": "Verify metric SQL matches current schema. Check baseline values.",
+}
+
+
+async def generate_remediation_plan(
+    asset_id: str,
+    provider_name: str | None,
+    db: AsyncSession,
+) -> dict:
+    """Generate a structured remediation plan for an asset's recent failures."""
+    import json as _j
+
+    asset_res = await db.execute(
+        select(DataAsset, Domain)
+        .join(Domain, DataAsset.domain_id == Domain.domain_id)
+        .where(DataAsset.asset_id == asset_id)
+    )
+    row = asset_res.one_or_none()
+    if not row:
+        return {"error": "Asset not found"}
+    asset, domain = row.DataAsset, row.Domain
+
+    failed_res = await db.execute(
+        select(DQRuleRun, DQRule)
+        .join(DQRule, DQRuleRun.rule_id == DQRule.rule_id)
+        .where(DQRuleRun.asset_id == asset_id, DQRuleRun.status.in_(["failed", "error"]))
+        .order_by(desc(DQRuleRun.created_at))
+        .limit(30)
+    )
+    failed_runs = failed_res.all()
+
+    if not failed_runs:
+        return {
+            "asset_id": asset_id,
+            "steps": [],
+            "summary": "No recent failures found — asset appears healthy.",
+        }
+
+    by_rule: dict[str, dict] = {}
+    for r in failed_runs:
+        rid = r.DQRule.rule_id
+        if rid not in by_rule or (r.DQRuleRun.failure_percentage or 0) > by_rule[rid]["failure_pct"]:
+            by_rule[rid] = {
+                "rule_name": r.DQRule.rule_name,
+                "rule_type": r.DQRule.rule_type,
+                "severity": r.DQRule.severity,
+                "failure_pct": r.DQRuleRun.failure_percentage or 0,
+                "failed_rows": r.DQRuleRun.failed_rows_count or 0,
+                "hint": _REMEDIATION_HINTS.get(r.DQRule.rule_type, "Review rule logic and source data."),
+            }
+
+    failures_text = "\n".join(
+        f"- {v['rule_name']} ({v['rule_type']}, severity={v['severity']}): "
+        f"{v['failure_pct']:.1f}% failed. Hint: {v['hint']}"
+        for v in by_rule.values()
+    )
+
+    sys_remed = (
+        "You are a data engineering expert. Generate a structured remediation plan. "
+        "Return ONLY valid JSON: {\"steps\": [{\"action\": \"...\", \"rule_name\": \"...\", "
+        "\"rule_type\": \"...\", \"priority\": \"critical|high|medium|low\", "
+        "\"owner_role\": \"...\", \"estimated_effort\": \"...\"}], "
+        "\"summary\": \"2-sentence executive summary\"}"
+    )
+    prompt = (
+        f"Asset: {asset.sf_schema_name}.{asset.sf_table_name} "
+        f"(domain: {domain.domain_name}, criticality: {asset.criticality})\n\n"
+        f"Recent failures ({len(by_rule)} distinct rules):\n{failures_text}\n\n"
+        "Generate a prioritised remediation plan."
+    )
+
+    provider = await get_provider_from_db(provider_name, db)
+    raw = await provider.complete(prompt, sys_remed, max_tokens=1200)
+    try:
+        start = raw.find("{"); end = raw.rfind("}") + 1
+        plan = _j.loads(raw[start:end]) if start >= 0 else {}
+    except Exception:
+        plan = {"steps": [], "summary": raw[:300]}
+
+    return {
+        "asset_id": asset_id,
+        "table": f"{asset.sf_schema_name}.{asset.sf_table_name}",
+        "failures_analysed": len(by_rule),
+        "steps": plan.get("steps", []),
+        "summary": plan.get("summary", ""),
+    }
