@@ -593,3 +593,56 @@ async def explain_incident(
     )
     provider = await get_provider_from_db(provider_name, db)
     return await provider.complete(prompt, _SYS_EXPLAIN, max_tokens=1000)
+
+
+async def generate_asset_description(
+    asset_id: str,
+    provider_name: str | None,
+    db: AsyncSession,
+) -> str:
+    """Generate and save a business description for a data asset using column metadata."""
+    from app.db.models import ColumnMetadata
+
+    asset_res = await db.execute(
+        select(DataAsset, Domain, Subdomain)
+        .join(Domain, DataAsset.domain_id == Domain.domain_id)
+        .join(Subdomain, DataAsset.subdomain_id == Subdomain.subdomain_id)
+        .where(DataAsset.asset_id == asset_id)
+    )
+    row = asset_res.one_or_none()
+    if not row:
+        return "Asset not found."
+    asset, domain, subdomain = row.DataAsset, row.Domain, row.Subdomain
+
+    cols_res = await db.execute(
+        select(ColumnMetadata).where(ColumnMetadata.asset_id == asset_id).limit(50)
+    )
+    cols = cols_res.scalars().all()
+
+    col_lines = []
+    for c in cols:
+        line = f"- {c.column_name} ({c.data_type or 'unknown'})"
+        if c.cardinality_pct is not None:
+            line += f", cardinality {c.cardinality_pct:.0f}%"
+        if c.sample_values:
+            line += f", samples: {c.sample_values[:80]}"
+        col_lines.append(line)
+
+    sys_doc = (
+        "You are a data governance expert. Write a concise 2-4 sentence business description "
+        "for a Snowflake table. Describe what business data it contains, who likely uses it, "
+        "and what it is useful for. Do NOT mention column names directly. Write for a business audience."
+    )
+    prompt = (
+        f"Table: {asset.sf_schema_name}.{asset.sf_table_name}\n"
+        f"Domain: {domain.domain_name} > {subdomain.subdomain_name}\n"
+        f"Owner: {asset.owner_name or 'unknown'}\n"
+        f"Criticality: {asset.criticality}\n"
+        f"Columns ({len(cols)}):\n" + "\n".join(col_lines[:30])
+    )
+
+    provider = await get_provider_from_db(provider_name, db)
+    description = (await provider.complete(prompt, sys_doc, max_tokens=300)).strip()
+    asset.table_description = description
+    await db.commit()
+    return description

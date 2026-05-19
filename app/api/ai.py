@@ -506,6 +506,25 @@ async def explain_incident_endpoint(
         raise _llm_err(e)
 
 
+@router.post("/assets/{asset_id}/generate-description")
+@limiter.limit("20/minute")
+async def generate_asset_description(
+    request: Request,
+    asset_id: str,
+    payload: dict = {},
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Generate and save a business description for a data asset using its column metadata."""
+    try:
+        description = await ai_service.generate_asset_description(
+            asset_id, payload.get("provider"), db
+        )
+        return {"asset_id": asset_id, "description": description}
+    except RuntimeError as e:
+        raise _llm_err(e)
+
+
 @router.post("/incidents/{incident_id}/generate-postmortem")
 async def generate_postmortem(
     incident_id: str,
