@@ -715,11 +715,12 @@ async def global_trend(
 
 @router.get("/dimensions")
 async def quality_dimensions(
+    domain_id: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
     """Return quality scores grouped by data quality dimension for today's runs."""
-    domain_scope = get_domain_filter(user)
+    domain_scope = domain_id or get_domain_filter(user)
     today = datetime.now(timezone.utc).replace(tzinfo=None).date()
 
     q = (
