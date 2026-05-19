@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
-import { useParams, usePathname } from 'next/navigation'
+import { useParams, usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   Globe, Shield, CheckCircle, XCircle, AlertTriangle,
@@ -66,6 +66,7 @@ export default function DomainDetailPage() {
     ? _domainId
     : pathname.split('/').filter(Boolean).pop() ?? ''
 
+  const router = useRouter()
   const { formatTime } = useTimezone()
 
   const [data,           setData]           = useState<DomainDashboard | null>(null)
@@ -214,7 +215,10 @@ export default function DomainDetailPage() {
       {/* ── ROW 1: Hero score (1/3) + 6 KPI chips (2/3) ──────────────── */}
       <div className="grid px-3 pt-3 pb-1.5 gap-3 shrink-0" style={{ gridTemplateColumns: '1fr 2fr' }}>
 
-        <div className="rounded-xl p-4 flex flex-col items-center justify-center gap-2 relative"
+        <button
+          title="Click to view detailed quality scorecard"
+          onClick={() => router.push('/dashboard/quality-score')}
+          className="rounded-xl p-4 flex flex-col items-center justify-center gap-2 relative cursor-pointer"
           style={{ background: 'linear-gradient(145deg,#f0fdf4,#dcfce7,#bbf7d0)', border: '2px solid #86efac', boxShadow: '0 6px 20px rgba(34,197,94,0.18)' }}>
           <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: '#15803d' }}>Domain Quality Score</span>
           <span className="font-black leading-none tabular-nums" style={{ fontSize: '3rem', color: '#15803d', letterSpacing: '-2px' }}>
@@ -227,7 +231,7 @@ export default function DomainDetailPage() {
               {scoreDelta > 0 ? '+' : ''}{scoreDelta.toFixed(1)}% vs yesterday
             </span>
           )}
-        </div>
+        </button>
 
         <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(3,1fr)', gridTemplateRows: '1fr 1fr' }}>
           <div className="rounded-lg flex flex-col items-center justify-center gap-1 py-2" style={card}>
@@ -322,11 +326,8 @@ export default function DomainDetailPage() {
 
       {/* ── ROW 3: Subdomain Health ────────────────────────────────────── */}
       <div className="mx-3 mb-1.5 rounded-lg p-3 shrink-0" style={card}>
-        <div className="flex items-center justify-between mb-2">
+        <div className="mb-2">
           <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Subdomain Health</span>
-          <Link href={`/dashboard/domains/${domainId}`} className="text-[10px] font-medium" style={{ color: '#6366f1' }}>
-            → All subdomains
-          </Link>
         </div>
         <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
           {subdomains.map(sub => {
