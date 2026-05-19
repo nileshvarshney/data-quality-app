@@ -3,18 +3,17 @@ import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import {
   Globe, Shield, Database, CheckCircle, XCircle, AlertTriangle,
-  Bell, RefreshCw, TrendingDown, Download, ChevronRight,
+  Bell, RefreshCw, TrendingDown, TrendingUp, Download, ChevronRight,
   Clock, Activity, Play,
 } from 'lucide-react'
 import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RTooltip,
 } from 'recharts'
-import { dashboardApi, executionsApi, alertsApi } from '@/services/apiClient'
+import { dashboardApi, executionsApi } from '@/services/apiClient'
 import { GlobalDashboard, DomainSummary } from '@/types'
 import QualityTrendChart from '@/components/charts/QualityTrendChart'
 import SeverityBadge from '@/components/common/SeverityBadge'
 import { useTimezone } from '@/contexts/TimezoneContext'
-import { useTheme } from '@/components/layout/ThemeProvider'
 
 // ── Score helpers ─────────────────────────────────────────────────────────────
 
@@ -47,10 +46,7 @@ function relTime(ts: string): string {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function GlobalDashboardPage() {
-  const { theme }      = useTheme()
   const { formatTime } = useTimezone()
-  // trackColor kept for potential future use of ScoreRing
-  void theme
 
   const [global,         setGlobal]         = useState<GlobalDashboard | null>(null)
   const [domains,        setDomains]        = useState<DomainSummary[]>([])
@@ -63,17 +59,14 @@ export default function GlobalDashboardPage() {
   const loadAll = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true)
     try {
-      const [gRes, dRes, rRes, aRes] = await Promise.allSettled([
+      const [gRes, dRes, rRes] = await Promise.allSettled([
         dashboardApi.global(),
         dashboardApi.domains(),
         executionsApi.listRunsEnriched({ status: 'failed', limit: 8 }),
-        alertsApi.listEnriched({ status: 'open', limit: 6 }),
       ])
       if (gRes.status === 'fulfilled') setGlobal(gRes.value.data)
       if (dRes.status === 'fulfilled') setDomains(Array.isArray(dRes.value.data) ? dRes.value.data : [])
       if (rRes.status === 'fulfilled') setRecentFailures(Array.isArray(rRes.value.data) ? rRes.value.data : [])
-      // openAlerts intentionally unused in new layout but kept for future use
-      void aRes
       setLastRefreshed(new Date())
       setError('')
     } catch {
@@ -146,7 +139,7 @@ export default function GlobalDashboardPage() {
         <div className="flex items-center gap-1.5">
           <Link href="/runs"
             className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-gray-300 bg-gray-800 border border-gray-700 rounded hover:border-blue-600 hover:text-blue-400 transition-all">
-            <Play size={10} /> Run All Rules
+            <Play size={10} /> View Runs
           </Link>
           <Link href="/alerts"
             className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-gray-300 bg-gray-800 border border-gray-700 rounded hover:border-orange-600 hover:text-orange-400 transition-all">
@@ -180,6 +173,7 @@ export default function GlobalDashboardPage() {
             </span>
             {Math.abs(scoreDelta) >= 0.05 && (
               <span className={`flex items-center gap-0.5 text-[10px] font-semibold ${scoreDelta > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {scoreDelta > 0 && <TrendingUp size={9} />}
                 {scoreDelta < 0 && <TrendingDown size={9} />}
                 {Math.abs(scoreDelta).toFixed(1)}%
               </span>
@@ -338,8 +332,8 @@ export default function GlobalDashboardPage() {
             </div>
           ) : (
             <div className="flex flex-col gap-1 overflow-hidden">
-              {(global?.sla_breaches ?? []).slice(0, 5).map((b, i) => (
-                <div key={i} className="flex items-center justify-between gap-2 py-0.5">
+              {(global?.sla_breaches ?? []).slice(0, 5).map((b) => (
+                <div key={b.table_name + b.domain_name} className="flex items-center justify-between gap-2 py-0.5">
                   <div className="min-w-0">
                     <p className="text-[11px] text-gray-300 font-medium truncate">{b.table_name}</p>
                     <p className="text-[10px] text-gray-600 truncate">{b.domain_name}</p>
@@ -374,7 +368,7 @@ export default function GlobalDashboardPage() {
                 <Link
                   key={d.domain_id}
                   href={`/dashboard/domains/${d.domain_id}`}
-                  className={`flex-shrink-0 bg-gray-900 border border-gray-800 border-l-4 ${scoreBorderClass(ds)} rounded-lg px-3 py-2 hover:border-gray-600 hover:border-l-4 transition-all`}
+                  className={`flex-shrink-0 bg-gray-900 border border-gray-800 border-l-4 ${scoreBorderClass(ds)} rounded-lg px-3 py-2 hover:bg-gray-800 hover:border-l-4 transition-all`}
                   style={{ width: '120px', height: '80px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}
                 >
                   <p className="text-[11px] text-gray-300 font-medium truncate leading-tight">{d.domain_name}</p>
@@ -402,9 +396,9 @@ export default function GlobalDashboardPage() {
               <span className="text-[11px] text-green-400 font-medium">✓ All tables healthy</span>
             </div>
           ) : (
-            <div className="flex flex-col gap-2 overflow-hidden flex-1">
-              {(global?.at_risk_tables ?? []).slice(0, 5).map((t, i) => (
-                <div key={i} className="flex flex-col gap-0.5">
+            <div className="flex flex-col gap-2 overflow-y-auto flex-1">
+              {(global?.at_risk_tables ?? []).slice(0, 5).map((t) => (
+                <div key={t.table_name + t.domain_name} className="flex flex-col gap-0.5">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] text-gray-300 font-medium truncate flex-1 mr-2">{t.table_name}</span>
                     <div className="flex items-center gap-1 shrink-0">
@@ -481,9 +475,9 @@ export default function GlobalDashboardPage() {
               <span className="text-[11px] text-green-400 font-medium">✓ No recent fixes</span>
             </div>
           ) : (
-            <div className="flex flex-col gap-2 overflow-hidden flex-1">
-              {(global?.recently_fixed ?? []).slice(0, 3).map((f, i) => (
-                <div key={i} className="flex flex-col gap-0.5 border-b border-gray-800 pb-1.5 last:border-0 last:pb-0">
+            <div className="flex flex-col gap-2 overflow-y-auto flex-1">
+              {(global?.recently_fixed ?? []).slice(0, 3).map((f) => (
+                <div key={f.rule_name + f.table_name} className="flex flex-col gap-0.5 border-b border-gray-800 pb-1.5 last:border-0 last:pb-0">
                   <div className="flex items-start justify-between gap-1">
                     <span className="text-[11px] text-gray-300 font-medium truncate flex-1">{f.rule_name}</span>
                     <span className="text-[11px] font-bold text-green-400 shrink-0">{f.new_score.toFixed(0)}%</span>
