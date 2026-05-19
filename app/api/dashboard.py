@@ -713,6 +713,44 @@ async def global_trend(
     return {"days": days, "trend": trend}
 
 
+@router.get("/dimensions")
+async def quality_dimensions(
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    """Return quality scores grouped by data quality dimension for today's runs."""
+    domain_scope = get_domain_filter(user)
+    today = datetime.now(timezone.utc).replace(tzinfo=None).date()
+
+    q = (
+        select(DQRule.rule_type, DQRuleRun.status)
+        .join(DQRuleRun, DQRule.rule_id == DQRuleRun.rule_id)
+        .where(func.date(DQRuleRun.created_at) == today)
+        .where(DQRule.is_active == True)
+    )
+    if domain_scope:
+        q = q.where(DQRule.domain_id == domain_scope)
+
+    rows = (await db.execute(q)).all()
+
+    dimension_map: dict[str, list[str]] = {
+        "completeness":   ["null_check", "not_null", "completeness"],
+        "freshness":      ["freshness", "timeliness"],
+        "consistency":    ["referential_integrity", "uniqueness", "consistency"],
+        "accuracy":       ["range_check", "format_check", "accuracy"],
+        "business_rule":  ["business_rule", "custom_sql", "threshold"],
+    }
+
+    result: dict[str, float | None] = {}
+    for dim, rule_types in dimension_map.items():
+        dim_rows = [r for r in rows if r.rule_type in rule_types]
+        total = len(dim_rows)
+        passed = sum(1 for r in dim_rows if r.status == "passed")
+        result[dim] = round(passed / total * 100, 1) if total > 0 else None
+
+    return result
+
+
 @router.get("/sla-breaches")
 async def sla_breaches(
     db: AsyncSession = Depends(get_db),
