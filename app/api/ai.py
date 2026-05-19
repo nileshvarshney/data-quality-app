@@ -352,10 +352,13 @@ async def trigger_rca(
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    """Trigger Root Cause Analysis for a failed run (§55.3)."""
-    from sqlalchemy import select, desc
+    """Root Cause Analysis — enriched with 30-run trend, day/hour patterns, sibling failures."""
+    from sqlalchemy import select, desc, func
     from app.db.models import DQRuleRun, DQRule, DataAsset
     from app.services.llm_providers import get_provider_from_db
+    import json as _j
+    from collections import Counter
+    from datetime import timedelta
 
     run_res = await db.execute(select(DQRuleRun).where(DQRuleRun.run_id == run_id))
     run = run_res.scalar_one_or_none()
@@ -368,38 +371,80 @@ async def trigger_rca(
     asset_res = await db.execute(select(DataAsset).where(DataAsset.asset_id == run.asset_id))
     asset = asset_res.scalar_one_or_none()
 
-    # lineage context removed - now uses data_object_relationships (object_id-based)
-    upstream_links = []
+    # Last 30 runs for same rule
+    hist_res = await db.execute(
+        select(DQRuleRun)
+        .where(DQRuleRun.rule_id == run.rule_id)
+        .order_by(desc(DQRuleRun.created_at))
+        .limit(30)
+    )
+    history = hist_res.scalars().all()
+    fail_pcts = [r.failure_percentage for r in history if r.failure_percentage is not None]
+    fail_statuses = Counter(r.status for r in history)
+    fail_days = Counter(
+        r.created_at.strftime("%A") for r in history if r.status == "failed" and r.created_at
+    )
+    fail_hours = Counter(
+        r.created_at.hour for r in history if r.status == "failed" and r.created_at
+    )
+    trend_summary = (
+        f"Last {len(history)} runs: {fail_statuses.get('passed',0)} passed, "
+        f"{fail_statuses.get('failed',0)} failed, {fail_statuses.get('error',0)} errors. "
+        f"Avg failure %: {sum(fail_pcts)/len(fail_pcts):.1f}% across {len(fail_pcts)} runs. "
+        f"Most failures on: {fail_days.most_common(2)}. "
+        f"Peak failure hours: {fail_hours.most_common(2)}."
+    ) if history else "No run history available."
 
-    # Build context for LLM
+    # Sibling failures in same domain ±2h
+    window = timedelta(hours=2)
+    sibling_res = await db.execute(
+        select(func.count(DQRuleRun.run_id))
+        .where(
+            DQRuleRun.domain_id == run.domain_id,
+            DQRuleRun.status == "failed",
+            DQRuleRun.asset_id != run.asset_id,
+            DQRuleRun.created_at >= (run.created_at - window),
+            DQRuleRun.created_at <= (run.created_at + window),
+        )
+    )
+    sibling_failures = sibling_res.scalar() or 0
+
     context = (
         f"Rule: {rule.rule_name if rule else run.rule_id}\n"
+        f"Rule type: {rule.rule_type if rule else 'unknown'}\n"
+        f"Severity: {rule.severity if rule else 'unknown'}\n"
         f"Table: {asset.sf_table_name if asset else run.asset_id}\n"
-        f"Failed rows: {run.failed_rows_count}\n"
-        f"Failure %: {run.failure_percentage}\n"
+        f"Failed rows: {run.failed_rows_count} / {run.total_rows_scanned} "
+        f"({run.failure_percentage:.1f}%)\n"
         f"Error message: {run.error_message or 'none'}\n"
-        f"Executed SQL: {(run.executed_sql or '')[:500]}\n"
-        f"Upstream tables: {', '.join([l.upstream_asset_id or '' for l in upstream_links]) or 'none'}\n"
+        f"Executed SQL: {(run.executed_sql or '')[:400]}\n"
+        f"--- Historical trend ---\n{trend_summary}\n"
+        f"Sibling asset failures in same domain ±2h: {sibling_failures}\n"
     )
+
     sys_rca = (
-        "You are a data engineering expert. Analyse the data quality failure and return "
-        "ONLY valid JSON: {root_cause, explanation, confidence (0-1), contributing_factors (list), recommended_action}."
-    )
-    prompt = (
-        f"Data quality failure:\n{context}\n"
-        f"Identify the most likely root cause."
+        "You are a data engineering expert. Analyse the data quality failure. "
+        "Consider the historical trend and sibling failures when identifying the root cause. "
+        "Return ONLY valid JSON: {root_cause, explanation, confidence (0-1), "
+        "contributing_factors (list), recommended_action (object: step, priority, owner_role, estimated_effort), "
+        "pattern_detected (string or null)}"
     )
     try:
-        from app.services.ai_service import _SYS_JSON_ONLY as _SJ  # noqa: F401 (unused name ok)
         provider = await get_provider_from_db(None, db)
-        raw = await provider.complete(prompt, system=sys_rca, max_tokens=700)
-        import json as _j
+        raw = await provider.complete(context, system=sys_rca, max_tokens=900)
         start = raw.find("{"); end = raw.rfind("}") + 1
         rca = _j.loads(raw[start:end]) if start >= 0 else {"root_cause": "Analysis unavailable", "explanation": raw}
     except Exception as e:
         rca = {"root_cause": "LLM unavailable", "explanation": str(e), "confidence": 0}
 
-    return {"run_id": run_id, "rule_id": run.rule_id, "asset_id": run.asset_id, "rca": rca}
+    return {
+        "run_id": run_id,
+        "rule_id": run.rule_id,
+        "asset_id": run.asset_id,
+        "trend_summary": trend_summary,
+        "sibling_failures_in_window": sibling_failures,
+        "rca": rca,
+    }
 
 
 @router.post("/chat/governance")
