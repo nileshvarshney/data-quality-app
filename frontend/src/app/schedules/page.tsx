@@ -1,5 +1,5 @@
 'use client'
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { schedulesApi, rulesApi, domainsApi, subdomainsApi, assetsApi } from '@/services/apiClient'
 import { useTimezone } from '@/contexts/TimezoneContext'
 import { formatTs as _formatTs } from '@/utils/dateFormat'
@@ -633,12 +633,43 @@ function ScheduleForm({
 
 function BundleRulesList({ rules }: { rules: BundledRule[] }) {
   const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState({ top: 0, left: 0, flipUp: false })
+  const btnRef = useRef<HTMLButtonElement>(null)
+
+  const handleToggle = () => {
+    if (!open && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect()
+      const spaceBelow = window.innerHeight - rect.bottom
+      const flipUp = spaceBelow < 280
+      setPos({
+        top: flipUp ? rect.top - 4 : rect.bottom + 4,
+        left: rect.left,
+        flipUp,
+      })
+    }
+    setOpen(o => !o)
+  }
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (btnRef.current && !btnRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
   if (!rules || rules.length === 0) return null
+
   return (
-    <div className="relative inline-block">
+    <div className="inline-block">
       <button
+        ref={btnRef}
         type="button"
-        onClick={() => setOpen(o => !o)}
+        onClick={handleToggle}
         className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 mt-0.5"
       >
         <Package size={11} />
@@ -646,17 +677,37 @@ function BundleRulesList({ rules }: { rules: BundledRule[] }) {
         <ChevronDown size={10} className={clsx('transition-transform', open && 'rotate-180')} />
       </button>
       {open && (
-        <div className="absolute z-20 left-0 top-full mt-1 w-72 bg-white rounded-xl border border-gray-200 shadow-lg p-3">
-          <p className="text-xs font-semibold text-gray-700 mb-2">Bundled Rules</p>
-          <div className="space-y-1.5 max-h-48 overflow-y-auto">
+        <div
+          className="fixed z-50 w-80 bg-white rounded-xl border border-gray-200 shadow-xl p-3"
+          style={pos.flipUp
+            ? { bottom: window.innerHeight - pos.top, left: pos.left }
+            : { top: pos.top, left: pos.left }
+          }
+        >
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold text-gray-700">
+              Bundled Rules <span className="text-gray-400 font-normal">({rules.length})</span>
+            </p>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="text-gray-400 hover:text-gray-600 p-0.5 rounded"
+            >
+              <X size={12} />
+            </button>
+          </div>
+          <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
             {rules.map(r => (
-              <div key={r.rule_id} className="flex items-start gap-2">
-                <span className={clsx('text-xs font-bold shrink-0 mt-0.5', SEV_COLORS[r.severity] ?? 'text-gray-500')}>
+              <div key={r.rule_id} className="flex items-start gap-2 py-1 border-b border-gray-50 last:border-0">
+                <span className={clsx('text-xs font-bold shrink-0 mt-0.5 w-4', SEV_COLORS[r.severity] ?? 'text-gray-500')}>
                   {r.severity[0].toUpperCase()}
                 </span>
-                <p className="text-xs text-gray-700 leading-snug">
-                  {r.rule_description || toPlainEnglish(r.rule_name)}
-                </p>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-gray-800 leading-snug">
+                    {r.rule_description || toPlainEnglish(r.rule_name)}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-0.5 capitalize">{r.severity}</p>
+                </div>
               </div>
             ))}
           </div>
