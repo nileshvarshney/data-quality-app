@@ -762,11 +762,13 @@ async def quality_dimensions(
     rows = (await db.execute(q)).all()
 
     dimension_map: dict[str, list[str]] = {
-        "completeness":   ["null_check", "not_null", "completeness"],
-        "freshness":      ["freshness", "timeliness"],
-        "consistency":    ["referential_integrity", "uniqueness", "consistency"],
-        "accuracy":       ["range_check", "format_check", "accuracy"],
-        "business_rule":  ["business_rule", "custom_sql", "threshold"],
+        "completeness":   ["null_check", "volume_check"],
+        "freshness":      ["freshness_check"],
+        "consistency":    ["uniqueness_check", "duplicate_check", "referential_integrity_check",
+                           "referential_sanity_check", "semantic_consistency_check",
+                           "distribution_consistency_check", "schema_drift_check"],
+        "accuracy":       ["range_check", "accepted_values_check", "regex_check", "llm_semantic_check"],
+        "business_rule":  ["business_rule_check", "custom_sql_check", "business_metric_check"],
     }
 
     result: dict[str, float | None] = {}
