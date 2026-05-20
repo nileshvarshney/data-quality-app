@@ -159,6 +159,23 @@ def list_jobs() -> list[dict]:
     ]
 
 
+# ── Rule-ID JSON helpers ──────────────────────────────────────────────────────
+
+def _rule_ids_to_db(rule_ids: list[str] | None) -> str | None:
+    import json
+    return json.dumps(rule_ids) if rule_ids else None
+
+
+def _rule_ids_from_db(raw: str | None) -> list[str] | None:
+    import json
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except Exception:
+        return None
+
+
 async def _nightly_aggregate():
     """Aggregate quality scores nightly so historical trends stay populated."""
     from app.db.database import AsyncSessionLocal
@@ -386,6 +403,157 @@ async def _bg_predict_all_assets() -> None:
         _log.info(f"Nightly prediction complete: {success}/{len(asset_ids)} assets predicted")
     except Exception as exc:
         _log.error(f"Nightly prediction job failed: {exc}")
+
+
+# ── Auto-schedule on approval ─────────────────────────────────────────────────
+
+async def _find_best_time(db) -> tuple[int, int]:
+    """Return (hour, minute) with the most room in the 6–10 AM window (max-gap)."""
+    from app.db.models import DQSchedule
+    from sqlalchemy import select
+
+    WINDOW_START = 360   # 6:00 AM in minutes since midnight
+    WINDOW_END   = 600   # 10:00 AM
+
+    result = await db.execute(select(DQSchedule).where(DQSchedule.is_active == True))
+    schedules = result.scalars().all()
+
+    occupied = sorted({
+        (s.run_at_hour or 6) * 60 + (s.run_at_minute or 0)
+        for s in schedules
+        if WINDOW_START <= (s.run_at_hour or 6) * 60 + (s.run_at_minute or 0) <= WINDOW_END
+    })
+
+    if not occupied:
+        return (6, 0)
+
+    boundaries = [WINDOW_START] + occupied + [WINDOW_END]
+    best_gap, best_mid = 0, WINDOW_START
+    for i in range(len(boundaries) - 1):
+        gap = boundaries[i + 1] - boundaries[i]
+        if gap > best_gap:
+            best_gap = gap
+            best_mid = (boundaries[i] + boundaries[i + 1]) // 2
+
+    return (best_mid // 60, best_mid % 60)
+
+
+async def ensure_table_schedule(rule, db) -> None:
+    """Add rule to its asset's table-level schedule, creating one if needed."""
+    import uuid
+    from datetime import datetime, timezone
+    from app.db.models import DQSchedule
+    from sqlalchemy import select
+
+    result = await db.execute(
+        select(DQSchedule).where(
+            DQSchedule.schedule_level == "table",
+            DQSchedule.asset_id == rule.asset_id,
+            DQSchedule.is_active == True,
+        ).limit(1)
+    )
+    sched = result.scalar_one_or_none()
+
+    if sched:
+        rule_ids = _rule_ids_from_db(sched.rule_ids) or []
+        if rule.rule_id in rule_ids:
+            return
+        rule_ids.append(rule.rule_id)
+        sched.rule_ids = _rule_ids_to_db(rule_ids)
+        sched.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        db.add(sched)
+        await db.commit()
+        register_schedule(
+            schedule_id=sched.schedule_id,
+            rule_id=None, asset_id=None, subdomain_id=None, domain_id=None,
+            rule_ids=rule_ids,
+            frequency=sched.frequency,
+            cron_expr=sched.cron_expression,
+            timezone=sched.timezone or settings.default_timezone,
+            run_at_hour=sched.run_at_hour if sched.run_at_hour is not None else 6,
+            run_at_minute=sched.run_at_minute if sched.run_at_minute is not None else 0,
+        )
+        logger.info("Added rule %s to existing table schedule %s", rule.rule_id, sched.schedule_id)
+    else:
+        hour, minute = await _find_best_time(db)
+        schedule_id = str(uuid.uuid4())
+        new_sched = DQSchedule(
+            schedule_id=schedule_id,
+            schedule_level="table",
+            asset_id=rule.asset_id,
+            domain_id=rule.domain_id,
+            subdomain_id=rule.subdomain_id,
+            frequency="daily",
+            timezone=settings.default_timezone,
+            run_at_hour=hour,
+            run_at_minute=minute,
+            rule_ids=_rule_ids_to_db([rule.rule_id]),
+            is_active=True,
+        )
+        db.add(new_sched)
+        await db.commit()
+        await db.refresh(new_sched)
+        register_schedule(
+            schedule_id=schedule_id,
+            rule_id=None, asset_id=None, subdomain_id=None, domain_id=None,
+            rule_ids=[rule.rule_id],
+            frequency="daily",
+            cron_expr=None,
+            timezone=settings.default_timezone,
+            run_at_hour=hour,
+            run_at_minute=minute,
+        )
+        logger.info(
+            "Created table schedule %s for asset %s at %02d:%02d",
+            schedule_id, rule.asset_id, hour, minute,
+        )
+
+
+async def remove_rule_from_table_schedule(rule_id: str, asset_id: str, db) -> None:
+    """Remove a rule from its asset's table-level schedule; deactivate if empty."""
+    from datetime import datetime, timezone
+    from app.db.models import DQSchedule
+    from sqlalchemy import select
+
+    result = await db.execute(
+        select(DQSchedule).where(
+            DQSchedule.schedule_level == "table",
+            DQSchedule.asset_id == asset_id,
+            DQSchedule.is_active == True,
+        ).limit(1)
+    )
+    sched = result.scalar_one_or_none()
+    if not sched:
+        return
+
+    rule_ids = _rule_ids_from_db(sched.rule_ids) or []
+    if rule_id not in rule_ids:
+        return
+
+    rule_ids.remove(rule_id)
+    sched.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    if not rule_ids:
+        sched.is_active = False
+        db.add(sched)
+        await db.commit()
+        remove_schedule(sched.schedule_id)
+        logger.info("Deactivated table schedule %s — no rules remain", sched.schedule_id)
+    else:
+        sched.rule_ids = _rule_ids_to_db(rule_ids)
+        db.add(sched)
+        await db.commit()
+        register_schedule(
+            schedule_id=sched.schedule_id,
+            rule_id=None, asset_id=None, subdomain_id=None, domain_id=None,
+            rule_ids=rule_ids,
+            frequency=sched.frequency,
+            cron_expr=sched.cron_expression,
+            timezone=sched.timezone or settings.default_timezone,
+            run_at_hour=sched.run_at_hour if sched.run_at_hour is not None else 6,
+            run_at_minute=sched.run_at_minute if sched.run_at_minute is not None else 0,
+        )
+        logger.info("Removed rule %s from table schedule %s", rule_id, sched.schedule_id)
 
 
 def start_scheduler():

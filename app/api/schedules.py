@@ -1,5 +1,4 @@
 import uuid
-import json
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -11,24 +10,12 @@ from app.services.scheduler_service import (
     _schedule_column_profile_job, _nightly_column_profile,
     _schedule_quality_aggregation_job, _nightly_aggregate,
     _schedule_policy_evaluation_job, _bg_evaluate_policies,
+    _rule_ids_to_db, _rule_ids_from_db,
 )
 from app.core.security import get_current_user
 from datetime import datetime, timezone
 
 router = APIRouter(prefix="/schedules", tags=["Schedules"])
-
-
-def _rule_ids_to_db(rule_ids: list[str] | None) -> str | None:
-    return json.dumps(rule_ids) if rule_ids else None
-
-
-def _rule_ids_from_db(raw: str | None) -> list[str] | None:
-    if not raw:
-        return None
-    try:
-        return json.loads(raw)
-    except Exception:
-        return None
 
 
 def _register(sched: DQSchedule):

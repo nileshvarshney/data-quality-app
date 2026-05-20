@@ -339,14 +339,17 @@ async def set_rule_status(
 
 @router.delete("/{rule_id}")
 async def delete_rule(rule_id: str, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
+    from app.services.scheduler_service import remove_rule_from_table_schedule
     result = await db.execute(select(DQRule).where(DQRule.rule_id == rule_id))
     rule = result.scalar_one_or_none()
     if not rule:
         raise HTTPException(404, "Rule not found")
+    asset_id = rule.asset_id
     rule.is_active = False
     rule.status = "archived"
     rule.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     await db.commit()
+    await remove_rule_from_table_schedule(rule_id, asset_id, db)
     return {"message": "Rule archived"}
 
 
@@ -382,6 +385,8 @@ async def approve_rule(
     ))
     await db.commit()
     await db.refresh(rule)
+    from app.services.scheduler_service import ensure_table_schedule
+    await ensure_table_schedule(rule, db)
     return rule
 
 
@@ -414,6 +419,8 @@ async def reject_rule(
     ))
     await db.commit()
     await db.refresh(rule)
+    from app.services.scheduler_service import remove_rule_from_table_schedule
+    await remove_rule_from_table_schedule(rule.rule_id, rule.asset_id, db)
     return rule
 
 
