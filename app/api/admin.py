@@ -108,7 +108,6 @@ async def _delete_domain_data(domain_id: str, db: AsyncSession) -> dict:
     counts["sharing_agreements"]= await _del(DataSharingAgreement,
                                              DataSharingAgreement.producer_domain_id == domain_id)
     counts["data_assets"]      = await _del(DataAsset,  DataAsset.domain_id == domain_id)
-    counts["subdomains"]       = await _del(Subdomain,  Subdomain.domain_id == domain_id)
 
     return {k: v for k, v in counts.items() if v and v > 0}
 
@@ -208,6 +207,12 @@ async def delete_domain_completely(
 
     # Clean all child data first
     counts = await _delete_domain_data(domain_id, db)
+
+    # Delete subdomains (only in full-delete path, not clean-data)
+    sub_res = await db.execute(delete(Subdomain).where(Subdomain.domain_id == domain_id))
+    subdomain_count = sub_res.rowcount
+    if subdomain_count:
+        counts["subdomains"] = subdomain_count
 
     # Then delete the domain itself
     await db.delete(domain)
