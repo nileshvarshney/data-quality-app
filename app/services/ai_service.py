@@ -497,6 +497,50 @@ async def classify_table(
         return {"domain": "Others", "subdomain": "Custom", "reason": raw}
 
 
+async def suggest_data_quality_rules(
+    table_name: str,
+    columns_with_samples: list[dict],
+    n_rules: int,
+    provider_name: str | None,
+    db: AsyncSession,
+) -> list[dict]:
+    """Ask the LLM to suggest data quality rules for a table.
+
+    Returns a list of rule dicts: [{rule_type, rule_name, target_column, rule_config, severity}].
+    Returns [] on any LLM or parse failure — never raises.
+    """
+    col_info = "\n".join(
+        f"- {c['column_name']} ({c.get('data_type', 'unknown')})"
+        + (f"  samples: {c['sample_values']}" if c.get("sample_values") else "")
+        for c in columns_with_samples
+    )
+    sys_prompt = (
+        "You are a data quality expert. Given a Snowflake table's columns, "
+        "suggest specific data quality rules. "
+        f"Return ONLY a JSON array of up to {n_rules} rules. "
+        "Each rule must have: rule_type (one of: business_rule_check, regex_check, "
+        "accepted_values_check, semantic_consistency_check), "
+        "rule_name (string), target_column (string or null), "
+        "rule_config (object — for business_rule_check include 'condition'; "
+        "for regex_check include 'pattern'; "
+        "for accepted_values_check include 'accepted_values' list), "
+        "severity (critical|high|medium|low). "
+        "Return ONLY the JSON array, no explanation."
+    )
+    prompt = f"Table: {table_name}\nColumns:\n{col_info}"
+    try:
+        provider = await get_provider_from_db(provider_name, db)
+        raw = await provider.complete(prompt, sys_prompt, max_tokens=600)
+        start = raw.find("[")
+        end = raw.rfind("]") + 1
+        if start < 0:
+            return []
+        return json.loads(raw[start:end])
+    except Exception as exc:
+        logger.warning("LLM rule suggestion failed for table %s: %s", table_name, exc)
+        return []
+
+
 # ── Chat (with compressed context + bounded history) ─────────────────────────
 
 async def chat(
