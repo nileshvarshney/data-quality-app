@@ -311,6 +311,7 @@ async def _run_column_profile(job_id: str, asset_id: str) -> None:
                     select(ColumnMetadata).where(ColumnMetadata.asset_id == asset_id)
                 )
                 col_profiles = col_profiles_res.scalars().all()
+                await db.refresh(asset)
                 await create_phase2_rules(asset, list(col_profiles), db)
             except Exception as rule_err:
                 logger.warning(
