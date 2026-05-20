@@ -128,6 +128,7 @@ export interface DomainDashboard {
     subdomain_name: string
     quality_score:  number
     total_rules:    number
+    asset_count:    number
   }[]
   quality_trend: Array<{ date: string; score: number | null; total: number; passed: number }>
   top_failing_rules: { run_id: string; rule_id: string; status: string; failed_rows: number }[]

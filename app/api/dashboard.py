@@ -485,6 +485,17 @@ async def domain_dashboard(
     subs_result = await db.execute(select(Subdomain).where(Subdomain.domain_id == domain_id))
     subs = subs_result.scalars().all()
 
+    # Asset counts per subdomain — one batch query instead of N
+    asset_cnt_by_sub: dict[str, int] = {}
+    if subs:
+        sub_ids = [s.subdomain_id for s in subs]
+        asset_cnt_res = await db.execute(
+            select(DataAsset.subdomain_id, func.count(DataAsset.asset_id).label("cnt"))
+            .where(DataAsset.subdomain_id.in_(sub_ids))
+            .group_by(DataAsset.subdomain_id)
+        )
+        asset_cnt_by_sub = {r.subdomain_id: r.cnt for r in asset_cnt_res}
+
     today_runs_result = await db.execute(
         select(DQRuleRun).where(DQRuleRun.domain_id == domain_id,
                                 func.date(DQRuleRun.created_at) == datetime.now(timezone.utc).replace(tzinfo=None).date())
@@ -515,6 +526,7 @@ async def domain_dashboard(
             "subdomain_name": sub.subdomain_name,
             "quality_score": round(sum(sub_scores) / len(sub_scores), 1) if sub_scores else 100.0,
             "total_rules": sum(1 for r in all_rules if r.subdomain_id == sub.subdomain_id),
+            "asset_count": asset_cnt_by_sub.get(sub.subdomain_id, 0),
         })
 
     return {

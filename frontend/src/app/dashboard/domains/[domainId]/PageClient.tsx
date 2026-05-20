@@ -344,7 +344,9 @@ export default function DomainDetailPage() {
                   <div className="text-[11px] font-semibold truncate" style={{ color: isRisk ? '#dc2626' : 'var(--text)' }}>
                     {sub.subdomain_name}{isRisk ? ' ⚠' : ''}
                   </div>
-                  <div className="text-[9px]" style={{ color: 'var(--text-4)' }}>{sub.total_rules}r</div>
+                  <div className="text-[9px]" style={{ color: 'var(--text-4)' }}>
+                    {sub.asset_count ?? 0}t · {sub.total_rules}r
+                  </div>
                 </div>
                 <span className="text-sm font-black tabular-nums shrink-0" style={{ color: scoreColor(ss) }}>
                   {ss.toFixed(0)}%
