@@ -311,11 +311,16 @@ async def run_discovery(job_id: str, payload: dict) -> None:
                         # Auto-create Phase 1 data quality rules
                         try:
                             from app.services.auto_rule_service import create_phase1_rules
+                            await db.refresh(asset)
                             await create_phase1_rules(asset, columns, db)
                         except Exception as rule_err:
                             logger.warning(
                                 "Phase 1 auto-rules failed for %s: %s", asset.asset_id, rule_err
                             )
+                            try:
+                                await db.rollback()
+                            except Exception:
+                                pass
 
                         # Auto-trigger column profiling (same pattern as create_asset)
                         try:

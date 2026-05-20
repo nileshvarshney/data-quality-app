@@ -173,7 +173,11 @@ async def create_phase1_rules(
         existing.add(key)
 
     if created:
-        await db.commit()
+        try:
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            raise
 
     logger.info("Auto Phase 1: created %d rules for asset %s", len(created), asset.asset_id)
     return created
@@ -244,7 +248,11 @@ async def create_phase2_rules(
                 existing.add(key)
 
     if created:
-        await db.commit()
+        try:
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            raise
 
     logger.info("Auto Phase 2: created %d rules for asset %s", len(created), asset.asset_id)
     return created

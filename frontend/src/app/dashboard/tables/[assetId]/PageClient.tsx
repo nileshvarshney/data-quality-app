@@ -445,7 +445,7 @@ export default function TableDashboardPage() {
         {([
           { id: 'quality', label: 'Quality',       icon: <Shield size={14} /> },
           { id: 'schema',  label: 'Schema',         icon: <Columns size={14} /> },
-          { id: 'rules',   label: 'Rules',           icon: <Database size={14} /> },
+          { id: 'rules',   label: `Rules${(data.pending_rules ?? 0) > 0 ? ` (${data.pending_rules} pending)` : ''}`,  icon: <Database size={14} /> },
           { id: 'lineage', label: 'Lineage',         icon: <GitFork size={14} /> },
           { id: 'drift',   label: 'Schema Drift',   icon: <GitCompare size={14} /> },
           { id: 'trends',  label: 'Profile Trends', icon: <TrendingUp size={14} /> },
@@ -678,9 +678,17 @@ export default function TableDashboardPage() {
       {/* ── Rules tab ───────────────────────────────────────────── */}
       {activeTab === 'rules' && (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
-            <Database size={15} className="text-gray-500" />
-            <h3 className="text-sm font-semibold text-gray-900">All Rules ({(data.rules || []).length})</h3>
+          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Database size={15} className="text-gray-500" />
+              <h3 className="text-sm font-semibold text-gray-900">All Rules ({(data.rules || []).length})</h3>
+            </div>
+            {(data.pending_rules ?? 0) > 0 && (
+              <Link href="/rules/approval-queue" className="flex items-center gap-1.5 text-xs font-medium text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-1.5 hover:bg-yellow-100 transition-colors">
+                <Sparkles size={12} />
+                {data.pending_rules} auto-generated rule{data.pending_rules > 1 ? 's' : ''} awaiting review
+              </Link>
+            )}
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -701,7 +709,11 @@ export default function TableDashboardPage() {
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-500">{rule.rule_type.replace(/_/g, ' ')}</td>
                     <td className="px-4 py-3"><SeverityBadge severity={rule.severity} /></td>
-                    <td className="px-4 py-3"><StatusBadge status={rule.status} /></td>
+                    <td className="px-4 py-3">
+                      {rule.rule_status === 'pending_review'
+                        ? <StatusBadge status="pending_review" />
+                        : <StatusBadge status={rule.status} />}
+                    </td>
                     <td className="px-4 py-3">
                       {rule.quality_score != null
                         ? <span className={`text-xs font-bold ${scoreTextColor(rule.quality_score)}`}>{rule.quality_score.toFixed(0)}%</span>

@@ -4,7 +4,7 @@ import io
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc, and_, case, literal_column
+from sqlalchemy import select, func, desc, and_, or_, case, literal_column
 from datetime import datetime, timezone, timedelta, date
 from typing import Optional
 from app.db.database import get_db
@@ -604,7 +604,12 @@ async def table_dashboard(
     check_domain_access(user, asset.domain_id)
     response.headers["Cache-Control"] = _CACHE_HEADER
 
-    rules_result = await db.execute(select(DQRule).where(DQRule.asset_id == asset_id, DQRule.is_active == True))
+    rules_result = await db.execute(
+        select(DQRule).where(
+            DQRule.asset_id == asset_id,
+            or_(DQRule.is_active == True, DQRule.status == "pending_review"),
+        )
+    )
     rules = rules_result.scalars().all()
 
     recent_runs_result = await db.execute(
@@ -630,6 +635,8 @@ async def table_dashboard(
             "rule_name":        rule.rule_name,
             "rule_type":        rule.rule_type,
             "severity":         rule.severity,
+            "rule_status":      rule.status,
+            "is_active":        rule.is_active,
             "status":           lr.status if lr else "never_run",
             "last_run":         lr.created_at.isoformat() if lr else None,
             "last_run_id":      lr.run_id if lr else None,
@@ -653,7 +660,8 @@ async def table_dashboard(
         "owner_name":         asset.owner_name,
         "owner_email":        asset.owner_email,
         "quality_score":      score,
-        "total_rules":        len(rules),
+        "total_rules":        sum(1 for r in rules if r.is_active),
+        "pending_rules":      sum(1 for r in rules if r.status == "pending_review"),
         "passed_rules":  sum(1 for rid, lr in run_by_rule.items() if lr.status == "passed"),
         "failed_rules":  sum(1 for rid, lr in run_by_rule.items() if lr.status in ("failed", "error")),
         "warning_rules": sum(1 for rid, lr in run_by_rule.items() if lr.status == "warning"),
