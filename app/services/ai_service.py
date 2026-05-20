@@ -523,7 +523,8 @@ async def suggest_data_quality_rules(
         "rule_name (string), target_column (string or null), "
         "rule_config (object — for business_rule_check include 'condition'; "
         "for regex_check include 'pattern'; "
-        "for accepted_values_check include 'accepted_values' list), "
+        "for accepted_values_check include 'accepted_values' list; "
+        "for semantic_consistency_check include 'condition' e.g. 'end_date >= start_date'), "
         "severity (critical|high|medium|low). "
         "Return ONLY the JSON array, no explanation."
     )
@@ -533,7 +534,7 @@ async def suggest_data_quality_rules(
         raw = await provider.complete(prompt, sys_prompt, max_tokens=600)
         start = raw.find("[")
         end = raw.rfind("]") + 1
-        if start < 0:
+        if start < 0 or end <= 1:
             return []
         return json.loads(raw[start:end])
     except Exception as exc:
