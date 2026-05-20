@@ -304,6 +304,19 @@ async def _run_column_profile(job_id: str, asset_id: str) -> None:
 
             await db.commit()  # single commit for all columns + history
 
+            # Auto-create Phase 2 data quality rules from profiling stats
+            try:
+                from app.services.auto_rule_service import create_phase2_rules
+                col_profiles_res = await db.execute(
+                    select(ColumnMetadata).where(ColumnMetadata.asset_id == asset_id)
+                )
+                col_profiles = col_profiles_res.scalars().all()
+                await create_phase2_rules(asset, list(col_profiles), db)
+            except Exception as rule_err:
+                logger.warning(
+                    "Phase 2 auto-rules failed for %s: %s", asset_id, rule_err
+                )
+
         job_tracker.mark_completed(job_id)
         logger.info("Column profiling job %s completed for asset %s (%d columns)", job_id, asset_id, len(col_info))
     except Exception as exc:
