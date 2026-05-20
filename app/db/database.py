@@ -188,6 +188,15 @@ def create_tables():
         for col_ddl in [
             "ALTER TABLE snowflake_connections ADD COLUMN connection_type VARCHAR(50) DEFAULT 'named'",
             "ALTER TABLE snowflake_connections ADD COLUMN is_primary_target BOOLEAN DEFAULT FALSE",
+            # dq_rules columns added in governance upgrade (approval workflow, versioning)
+            "ALTER TABLE dq_rules ADD COLUMN rule_category VARCHAR(50)",
+            "ALTER TABLE dq_rules ADD COLUMN version INTEGER DEFAULT 1",
+            "ALTER TABLE dq_rules ADD COLUMN sla_threshold FLOAT",
+            "ALTER TABLE dq_rules ADD COLUMN approved_by VARCHAR(200)",
+            "ALTER TABLE dq_rules ADD COLUMN rejected_by VARCHAR(200)",
+            "ALTER TABLE dq_rules ADD COLUMN rejection_reason TEXT",
+            "ALTER TABLE dq_rules ADD COLUMN business_owner_name VARCHAR(200)",
+            "ALTER TABLE dq_rules ADD COLUMN business_owner_email VARCHAR(200)",
         ]:
             try:
                 conn.execute(text(col_ddl))

@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 
 from app.db.database import AsyncSessionLocal
-from app.db.models import AuditLog, DataAsset, Domain, Subdomain, SnowflakeConnection
+from app.db.models import AuditLog, DataAsset, Domain, DQRule, Subdomain, SnowflakeConnection
 from app.services import job_tracker
 from app.services.ai_service import classify_table
 
@@ -233,6 +233,48 @@ async def run_discovery(job_id: str, payload: dict) -> None:
                     tname = table["table_name"]
 
                     if tname in existing:
+                        # Backfill Phase 1 rules for assets that existed before auto-rules were added
+                        try:
+                            from app.services.auto_rule_service import create_phase1_rules
+                            from sqlalchemy import func as _func
+
+                            existing_asset_res = await db.execute(
+                                select(DataAsset).where(
+                                    DataAsset.connection_id == payload["connection_id"],
+                                    DataAsset.sf_database_name == database,
+                                    DataAsset.sf_schema_name == schema,
+                                    DataAsset.sf_table_name == tname,
+                                    DataAsset.is_active == True,
+                                )
+                            )
+                            existing_asset = existing_asset_res.scalar_one_or_none()
+
+                            if existing_asset:
+                                rule_count_res = await db.execute(
+                                    select(_func.count()).select_from(DQRule).where(
+                                        DQRule.asset_id == existing_asset.asset_id
+                                    )
+                                )
+                                if (rule_count_res.scalar() or 0) == 0:
+                                    try:
+                                        table_safe = _validate_ident(tname, "table")
+                                        columns = await asyncio.to_thread(
+                                            _browse_columns_sync, conn, db_safe, schema_safe, table_safe
+                                        )
+                                        await create_phase1_rules(existing_asset, columns, db)
+                                        logger.info(
+                                            "Backfilled Phase 1 rules for existing asset %s (%s)",
+                                            existing_asset.asset_id, tname,
+                                        )
+                                    except Exception as backfill_err:
+                                        logger.exception(
+                                            "Phase 1 backfill failed for %s: %s", tname, backfill_err
+                                        )
+                        except Exception as skip_check_err:
+                            logger.exception(
+                                "Error during rule check for skipped table %s: %s", tname, skip_check_err
+                            )
+
                         job_tracker.append_result(
                             job_id,
                             {
@@ -313,9 +355,10 @@ async def run_discovery(job_id: str, payload: dict) -> None:
                             from app.services.auto_rule_service import create_phase1_rules
                             await db.refresh(asset)
                             await create_phase1_rules(asset, columns, db)
-                        except Exception as rule_err:
-                            logger.warning(
-                                "Phase 1 auto-rules failed for %s: %s", asset.asset_id, rule_err
+                        except Exception:
+                            logger.exception(
+                                "Phase 1 auto-rules failed for asset %s (%s)",
+                                asset.asset_id, tname,
                             )
                             try:
                                 await db.rollback()

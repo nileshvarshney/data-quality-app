@@ -169,15 +169,16 @@ async def create_phase1_rules(
                 "source": "auto_discovery",
             },
         ))
-        created.append(rule)
-        existing.add(key)
-
-    if created:
+        # Commit each rule individually — batching multiple rows via executemany
+        # triggers a Snowflake connector bug (error 252001) when PARSE_JSON is
+        # present in the INSERT … SELECT form used for VARIANT columns.
         try:
             await db.commit()
         except Exception:
             await db.rollback()
             raise
+        created.append(rule)
+        existing.add(key)
 
     logger.info("Auto Phase 1: created %d rules for asset %s", len(created), asset.asset_id)
     return created
@@ -222,6 +223,11 @@ async def create_phase2_rules(
                 "source": "auto_discovery",
             },
         ))
+        try:
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            raise
         created.append(rule)
         existing.add(key)
 
@@ -244,15 +250,13 @@ async def create_phase2_rules(
                         "source": "auto_discovery_llm",
                     },
                 ))
+                try:
+                    await db.commit()
+                except Exception:
+                    await db.rollback()
+                    raise
                 created.append(rule)
                 existing.add(key)
-
-    if created:
-        try:
-            await db.commit()
-        except Exception:
-            await db.rollback()
-            raise
 
     logger.info("Auto Phase 2: created %d rules for asset %s", len(created), asset.asset_id)
     return created

@@ -313,10 +313,8 @@ async def _run_column_profile(job_id: str, asset_id: str) -> None:
                 col_profiles = col_profiles_res.scalars().all()
                 await db.refresh(asset)
                 await create_phase2_rules(asset, list(col_profiles), db)
-            except Exception as rule_err:
-                logger.warning(
-                    "Phase 2 auto-rules failed for %s: %s", asset_id, rule_err
-                )
+            except Exception:
+                logger.exception("Phase 2 auto-rules failed for asset %s", asset_id)
 
         job_tracker.mark_completed(job_id)
         logger.info("Column profiling job %s completed for asset %s (%d columns)", job_id, asset_id, len(col_info))
