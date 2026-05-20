@@ -19,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.db.models import ColumnMetadata, DataAsset, DQRule
+from app.db.models import AuditLog, ColumnMetadata, DataAsset, DQRule
 from app.services.sql_generator import sql_generator
 
 logger = logging.getLogger("dq_platform.auto_rules")
@@ -31,11 +31,10 @@ _NUMERIC_TYPE_RE = re.compile(r"NUMBER|INT|FLOAT|DECIMAL|DOUBLE|REAL|NUMERIC", r
 
 
 async def _build_dedup_set(asset_id: str, db: AsyncSession) -> set[tuple[str, Optional[str]]]:
-    """Return set of (rule_type, target_column) for all active rules on this asset."""
+    """Return set of (rule_type, target_column) for all rules on this asset (any status)."""
     result = await db.execute(
         select(DQRule.rule_type, DQRule.target_column).where(
             DQRule.asset_id == asset_id,
-            DQRule.is_active == True,
         )
     )
     return {(row.rule_type, row.target_column) for row in result}
@@ -158,6 +157,18 @@ async def create_phase1_rules(
         if key in existing:
             continue
         db.add(rule)
+        db.add(AuditLog(
+            audit_id=str(uuid.uuid4()),
+            user_email="auto_discovery",
+            action="CREATE",
+            entity_type="rule",
+            entity_id=rule.rule_id,
+            new_value={
+                "rule_type": rule.rule_type,
+                "asset_id": rule.asset_id,
+                "source": "auto_discovery",
+            },
+        ))
         created.append(rule)
         existing.add(key)
 
@@ -195,6 +206,18 @@ async def create_phase2_rules(
         if key in existing:
             continue
         db.add(rule)
+        db.add(AuditLog(
+            audit_id=str(uuid.uuid4()),
+            user_email="auto_discovery",
+            action="CREATE",
+            entity_type="rule",
+            entity_id=rule.rule_id,
+            new_value={
+                "rule_type": rule.rule_type,
+                "asset_id": rule.asset_id,
+                "source": "auto_discovery",
+            },
+        ))
         created.append(rule)
         existing.add(key)
 
@@ -205,6 +228,18 @@ async def create_phase2_rules(
             key = (rule.rule_type, rule.target_column)
             if key not in existing and len(created) < remaining:
                 db.add(rule)
+                db.add(AuditLog(
+                    audit_id=str(uuid.uuid4()),
+                    user_email="auto_discovery",
+                    action="CREATE",
+                    entity_type="rule",
+                    entity_id=rule.rule_id,
+                    new_value={
+                        "rule_type": rule.rule_type,
+                        "asset_id": rule.asset_id,
+                        "source": "auto_discovery_llm",
+                    },
+                ))
                 created.append(rule)
                 existing.add(key)
 
@@ -231,7 +266,8 @@ def _phase2_candidates(
                 min_v = float(col.min_value)
                 max_v = float(col.max_value)
                 r = _make_rule(asset, "range_check", col.column_name,
-                               {"min_value": min_v * 0.9, "max_value": max_v * 1.1},
+                               {"min_value": min_v - abs(min_v) * 0.1,
+                                "max_value": max_v + abs(max_v) * 0.1},
                                "medium", tref)
                 if r:
                     candidates.append(r)
